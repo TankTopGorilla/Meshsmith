@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- App identity: what Explorer, Task Manager and the taskbar show. -->
+    <Product>Meshsmith</Product>
+    <Company>Berke Altay</Company>
+    <!-- Windows surfaces AssemblyTitle as FileDescription in Explorer and Task Manager; the
+         Description property only fills AssemblyDescriptionAttribute, which the shell ignores. -->
+    <AssemblyTitle>Mesh to solid conversion for CAD</AssemblyTitle>
+    <Description>Mesh to solid conversion for CAD</Description>
+    <Copyright>© 2026 Berke Altay</Copyright>
+    <Version>0.1.4</Version>
+    <AssemblyVersion>0.1.4.0</AssemblyVersion>
+    <FileVersion>0.1.4.0</FileVersion>
+    <!-- Keep ProductVersion exactly "0.1.0" instead of appending the commit sha. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Same file as ApplicationIcon, but WPF needs it as a compiled resource for Window.Icon. -->
+    <Resource Include="app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HelixToolkit.Wpf" Version="3.1.2" />
+    <PackageReference Include="Occt.NET" Version="7.9.0" />
+    <ProjectReference Include="../Meshsmith.Core/Meshsmith.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Meshsmith.Worker/Meshsmith.Worker.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- The conversion worker is a separate process by design; it is copied beside the binary that
+       spawns it so the two share one occt\ folder instead of shipping the natives twice. -->
+  <Target Name="CopyConversionWorker" AfterTargets="Build">
+    <ItemGroup>
+      <WorkerPayload Include="../Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.exe" />
+      <WorkerPayload Include="../Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.dll" />
+      <WorkerPayload Include="../Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.runtimeconfig.json" />
+      <WorkerPayload Include="../Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WorkerPayload)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Publish has its own item list: the worker payload and the OCCT natives that the build
+       target copied to $(OutDir) are not part of it, so a published folder could not convert.
+       Copy both into $(PublishDir) explicitly. -->
+  <Target Name="PublishConversionWorker" AfterTargets="Publish">
+    <ItemGroup>
+      <WorkerPublish Include="../Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.exe" />
+      <WorkerPublish Include="../Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.dll" />
+      <WorkerPublish Include="../Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.deps.json" />
+      <WorkerPublish Include="../Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.runtimeconfig.json" />
+      <OcctPublish Include="$(OutDir)occt/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WorkerPublish)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(OcctPublish)"
+          DestinationFiles="@(OcctPublish->'$(PublishDir)occt\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

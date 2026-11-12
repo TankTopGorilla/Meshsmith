@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);SYSLIB0044;CA1416</NoWarn>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,50 @@
+<Window x:Class="Meshsmith.App.Views.SettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" Width="470" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource Bg1}" FontFamily="{StaticResource UiFont}"
+        Foreground="{StaticResource TextPrimary}" TextOptions.TextFormattingMode="Display">
+
+  <StackPanel Margin="20">
+    <TextBlock Style="{StaticResource SectionLabel}" Text="CONVERSION" />
+    <CheckBox Style="{StaticResource CheckSwitch}" Margin="0,12,0,0"
+              IsChecked="{Binding Repair}" AutomationProperties.Name="Repair the mesh"
+              Content="Repair the mesh before fitting" />
+    <TextBlock Text="Drops degenerates and duplicates, fixes winding and closes small holes. Every change is reported."
+               FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="25,3,0,0" />
+
+    <CheckBox Style="{StaticResource CheckSwitch}" Margin="0,14,0,0"
+              IsChecked="{Binding VerifyArtifacts}" AutomationProperties.Name="Verify the exported file"
+              Content="Read the exported file back and verify it" />
+    <TextBlock Text="Costs about 10 ms per face, so it is skipped above 4,000 faces."
+               FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="25,3,0,0" />
+
+    <TextBlock Style="{StaticResource SectionLabel}" Text="OUTPUT" Margin="0,22,0,8" />
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBox Style="{StaticResource FieldBox}" Text="{Binding DefaultOutputFolder, UpdateSourceTrigger=PropertyChanged}"
+               AutomationProperties.Name="Default output folder" />
+      <Button Grid.Column="1" Content="Browse…" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+              Height="26" Command="{Binding BrowseCommand}" AutomationProperties.Name="Browse for a folder" />
+    </Grid>
+    <TextBlock Text="Only a starting folder for the Save dialog. Nothing is written without asking."
+               FontSize="11" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,5,0,0" />
+
+    <Border Height="1" Background="{StaticResource Line}" Margin="0,20,0,16" />
+    <Grid>
+      <Button Content="Restore defaults" Style="{StaticResource GhostButton}"
+              HorizontalAlignment="Left" Command="{Binding RestoreDefaultsCommand}"
+              AutomationProperties.Name="Restore defaults" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button Content="Cancel" Style="{StaticResource GhostButton}" IsCancel="True"
+                Click="OnCancel" AutomationProperties.Name="Cancel settings" />
+        <Button Content="OK" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" IsDefault="True"
+                Click="OnOk" AutomationProperties.Name="Apply settings" />
+      </StackPanel>
+    </Grid>
+  </StackPanel>
+</Window>

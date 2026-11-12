@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Meshsmith.App/Meshsmith.App.csproj" />
+    <Project Path="src/Meshsmith.Cli/Meshsmith.Cli.csproj" />
+    <Project Path="src/Meshsmith.Core/Meshsmith.Core.csproj" />
+    <Project Path="src/Meshsmith.Worker/Meshsmith.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Meshsmith.App.Tests/Meshsmith.App.Tests.csproj" />
+    <Project Path="tests/Meshsmith.Core.Tests/Meshsmith.Core.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <!-- The tests spawn Meshsmith.Worker.exe from this output directory, so this folder needs the
+         OCCT natives the package's build target copies: without them the child cannot start. -->
+    <PackageReference Include="Occt.NET" Version="7.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Meshsmith.App/Meshsmith.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Meshsmith.Worker/Meshsmith.Worker.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- The conversion worker is a separate process by design; it is copied beside the binary that
+       spawns it so the two share one occt\ folder instead of shipping the natives twice. -->
+  <Target Name="CopyConversionWorker" AfterTargets="Build">
+    <ItemGroup>
+      <WorkerPayload Include="../../src/Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.exe" />
+      <WorkerPayload Include="../../src/Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.dll" />
+      <WorkerPayload Include="../../src/Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.runtimeconfig.json" />
+      <WorkerPayload Include="../../src/Meshsmith.Worker/bin/$(Configuration)/net8.0-windows7.0/Meshsmith.Worker.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WorkerPayload)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

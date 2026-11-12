@@ -1,0 +1,40 @@
+<Window x:Class="Meshsmith.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Meshsmith.App.Views"
+        Title="Meshsmith" Icon="app.ico" Width="1440" Height="900" MinWidth="1120" MinHeight="720"
+        Background="{StaticResource Bg0}" FontFamily="{StaticResource UiFont}"
+        WindowStartupLocation="CenterScreen" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+  <Window.InputBindings>
+    <KeyBinding Modifiers="Control" Key="O" Command="{Binding OpenCommand}" />
+    <KeyBinding Key="F5" Command="{Binding ConvertCommand}" />
+    <KeyBinding Modifiers="Control" Key="S" Command="{Binding SaveStepCommand}" />
+    <KeyBinding Modifiers="Control+Shift" Key="S" Command="{Binding SaveIgesCommand}" />
+  </Window.InputBindings>
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <views:TopBar />
+
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="288" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="336" />
+      </Grid.ColumnDefinitions>
+
+      <views:SourcePanel />
+      <views:ViewportPanel Grid.Column="1" />
+      <views:InspectorPanel Grid.Column="2" />
+    </Grid>
+
+    <views:StatusBarView Grid.Row="2" />
+  </Grid>
+</Window>
