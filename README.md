@@ -13,7 +13,7 @@ from disk and checked before the app calls it a success.
 
 - **0.1.4**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
 - **6 of 6** real test parts convert to a valid solid; 0 crashes.
-- `Meshsmith.Core` 54 tests, `Meshsmith.App` 140 tests.
+- `Meshsmith.Core` 61 tests, `Meshsmith.App` 140 tests.
 
 ## Requirements
 
