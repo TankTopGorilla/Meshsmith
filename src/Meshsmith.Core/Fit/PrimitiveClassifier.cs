@@ -55,9 +55,16 @@ public static class PrimitiveClassifier
 
         var leftovers = Enumerable.Range(0, mesh.TriangleCount).Where(t => !assigned[t]).ToArray();
         if (leftovers.Length > 0)
-            result.Add(new ClassifiedRegion(leftovers,
-                new FacetedPrimitive { Triangles = leftovers.Length, SourceTriangles = leftovers.Length },
-                AverageNormal(mesh, leftovers), Area(mesh, leftovers)));
+        {
+            // One region per connected patch of unrecognised triangles. A single leftovers region holds
+            // every body of a multi-body part, and RegionComponents.Group then reports ONE component for
+            // the whole part, so the per-body degradation has nothing to degrade (measured: clamp's
+            // 3,839 leftover triangles touch all four bodies).
+            foreach (var piece in ConnectedPieces(topo, leftovers))
+                result.Add(new ClassifiedRegion(piece,
+                    new FacetedPrimitive { Triangles = piece.Length, SourceTriangles = piece.Length },
+                    AverageNormal(mesh, piece), Area(mesh, piece)));
+        }
 
         return MergeSameSurface(mesh, result, options.Tolerance);
     }
@@ -147,4 +154,45 @@ public static class PrimitiveClassifier
         a.Primitive is PlanePrimitive pa && b.Primitive is PlanePrimitive pb &&
         Math.Abs(Vec3.Dot(pa.Normal, pb.Normal)) > 0.9999 &&
         Math.Abs(Vec3.Dot(pb.Point - pa.Point, pa.Normal)) <= tol;
+
+    /// <summary>
+    /// The connected components of a triangle set, by shared mesh edge. Two triangles that only touch
+    /// at a vertex are NOT connected: a vertex is how two bodies meet in a welded mesh, not how a shell
+    /// is sewn. Ordered by smallest triangle index, so region ids stay deterministic from run to run.
+    /// </summary>
+    private static List<int[]> ConnectedPieces(MeshTopology topo, int[] triangles)
+    {
+        if (triangles.Length == 0) return new List<int[]>();
+        if (triangles.Length == 1) return new List<int[]> { triangles };
+
+        var parent = new Dictionary<int, int>(triangles.Length);
+        foreach (var t in triangles) parent[t] = t;
+
+        int Find(int t)
+        {
+            while (parent[t] != t) { parent[t] = parent[parent[t]]; t = parent[t]; }
+            return t;
+        }
+
+        var inSet = new HashSet<int>(triangles);
+        foreach (var t in triangles)
+            for (int e = 0; e < 3; e++)
+            {
+                int n = topo.Neighbor[t * 3 + e];
+                if (n < 0 || !inSet.Contains(n)) continue;
+                int a = Find(t), b = Find(n);
+                if (a != b) parent[a] = b;
+            }
+
+        return triangles.GroupBy(Find)
+                        .Select(g => g.OrderBy(t => t).ToArray())
+                        .OrderBy(p => p[0])
+                        .ToList();
+    }
+
+    /// <summary>The same surface, re-stated for a smaller triangle set.</summary>
+    private static Primitive Reprime(Primitive primitive, int triangles) =>
+        primitive is FacetedPrimitive
+            ? new FacetedPrimitive { Triangles = triangles, SourceTriangles = triangles }
+            : primitive with { SourceTriangles = triangles };
 }
