@@ -13,7 +13,11 @@ from disk and checked before the app calls it a success.
 
 - **0.1.4**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
 - **6 of 6** real test parts convert to a valid solid; 0 crashes.
-- `Meshsmith.Core` 61 tests, `Meshsmith.App` 140 tests.
+- `Meshsmith.Core` 66 tests, `Meshsmith.App` 140 tests.
+- **R1.2**, measured through the CLI: IKI KATLI MONT P1 and Part 2 now export **2,024 faces** (was
+  2,784) as 8 solids at 96.8 % analytic coverage, `artifact=verified`; `clamp.stl` is unchanged at
+  4,444 faces, exit 5 (33.6 % coverage — it has no fully analytic body to save); `pin.stl` is
+  unchanged at 4 faces, valid.
 
 ## Requirements
 
