@@ -65,6 +65,7 @@ public static class ConversionPipeline
                                                    cancellationToken);
         Mark("recognising");
         if (regions.Count == 0) throw new InvalidOperationException("no regions recognised");
+        var recon = RecognitionStats.Compute(mesh, regions);
 
         options.Progress?.Invoke("building", 0.55);
         var faces = new List<TopoDS_Face>(regions.Count);
@@ -85,10 +86,16 @@ public static class ConversionPipeline
         if (repair.Changed) warnings.Add(repair.Describe());
 
         int facetedTriangles = 0;
+        int regionFallbacks = 0;      // regions that LOST an analytic face (build threw, or their body
+                                      // would not sew). A region the classifier never made analytic did
+                                      // not fall back, and neither did the all-or-nothing path - the
+                                      // `faceted` count already shows that one.
 
         // A region that was never analytic, or one OCCT refuses to trim, becomes one face per triangle.
-        void AddFaceted(ClassifiedRegion target)
+        void AddFaceted(int regionId, bool counted = true)
         {
+            var target = regions[regionId];
+            if (counted) regionFallbacks++;
             facetedTriangles += target.Triangles.Length;
             faces.AddRange(FacetedBuilder.Build(mesh, target.Triangles));
 
@@ -119,7 +126,7 @@ public static class ConversionPipeline
 
             if (region.Primitive is FacetedPrimitive)
             {
-                AddFaceted(region);
+                AddFaceted(id, counted: false);
                 continue;
             }
 
@@ -153,7 +160,7 @@ public static class ConversionPipeline
                 // the whole family degrades to facets rather than failing the part. Cancellation is
                 // the one thing that must not be swallowed.
                 warnings.Add($"region {id} fell back to faceted: {ex.Message}");
-                AddFaceted(region);
+                AddFaceted(id);
             }
         }
 
@@ -180,7 +187,7 @@ public static class ConversionPipeline
             triangleFace = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();
             facetedTriangles = 0;
 
-            foreach (var region in regions) AddFaceted(region);
+            for (int i = 0; i < regions.Count; i++) AddFaceted(i, counted: false);
 
             options.Progress?.Invoke("sewing", 0.85);
             sewed = SolidBuilder.Sew(faces, Math.Max(2 * tol, 1e-3));
@@ -239,6 +246,8 @@ public static class ConversionPipeline
                 Cylinders = faceRecords.Count(f => f.Category == "cylinder"),
                 Cones = faceRecords.Count(f => f.Category == "cone"),
                 FacetedTriangles = facetedTriangles,
+                ReconCoverage = recon.Coverage,
+                RegionFallbacks = regionFallbacks,
                 Edges = CountEdges(sewed.Shape)
             }
         };
@@ -270,6 +279,8 @@ public static class ConversionPipeline
                 FacetedTriangles = facetedTriangles,
                 FitTolerance = tol,
                 SurfaceDeviation = deviation,
+                ReconCoverage = recon.Coverage,
+                RegionFallbacks = regionFallbacks,
                 Warnings = warnings,
                 ArtifactStatus = artifact.Status.ToString(),
                 ArtifactDetail = artifact.Detail,
@@ -302,6 +313,8 @@ public static class ConversionPipeline
             FitTolerance = tol,
             ElapsedSeconds = sw.Elapsed.TotalSeconds,
             FacetedTriangles = facetedTriangles,
+            ReconCoverage = recon.Coverage,
+            RegionFallbacks = regionFallbacks,
             Edges = doc.Summary.Edges,
             TriangleCount = mesh.TriangleCount,
             Kind = doc.Kind,

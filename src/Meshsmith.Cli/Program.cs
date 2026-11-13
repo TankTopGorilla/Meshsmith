@@ -2,6 +2,10 @@ using Meshsmith.Core;
 
 internal static class Program
 {
+    /// <summary>Invariant culture: a Turkish machine formats 33.6 as "33,6" and the gate greps "33.6".</summary>
+    private static string Percent(double fraction) =>
+        (fraction * 100).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%";
+
     private static int Main(string[] args)
     {
         NativeLoader.Configure();          // no Occt types in this method
@@ -69,6 +73,8 @@ internal static class Program
         Console.WriteLine($"faces={result.FaceCount} solids={result.SolidCount} valid={result.IsValidSolid} " +
                           $"volume={result.Volume:F3} deviation={result.SurfaceDeviation:F6} " +
                           $"tol={result.FitTolerance:F4} faceted={result.FacetedTriangles} " +
+                          $"coverage={Percent(result.ReconCoverage)} " +
+                          $"region_fallbacks={result.RegionFallbacks} " +
                           $"artifact={result.Artifact.Status.ToString().ToLowerInvariant()} " +
                           $"time={result.ElapsedSeconds:F2}s");
         if (result.Artifact.Status != Meshsmith.Core.Export.ArtifactStatus.Verified)

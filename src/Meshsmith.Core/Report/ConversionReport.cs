@@ -10,6 +10,8 @@ public sealed class ConversionReport
     [JsonPropertyName("faceted_triangles")] public int FacetedTriangles { get; set; }
     [JsonPropertyName("fit_tolerance")] public double FitTolerance { get; set; }
     [JsonPropertyName("surface_deviation")] public double SurfaceDeviation { get; set; }
+    [JsonPropertyName("recon_coverage")] public double ReconCoverage { get; set; }
+    [JsonPropertyName("region_fallbacks")] public int RegionFallbacks { get; set; }
     [JsonPropertyName("warnings")] public List<string> Warnings { get; set; } = new();
 
     /// <summary>Verified / Mismatch / Skipped — what the written file was found to contain.</summary>

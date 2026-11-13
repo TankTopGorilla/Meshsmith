@@ -20,6 +20,12 @@ public sealed class ConversionResult
     public required int TriangleCount { get; init; }
     public required string Kind { get; init; }
 
+    /// <summary>Share of triangles the classifier turned into analytic surfaces (0..1).</summary>
+    public double ReconCoverage { get; init; }
+
+    /// <summary>Regions that fell back to facets for a reason of their own.</summary>
+    public int RegionFallbacks { get; init; }
+
     /// <summary>What the written STEP contains, read back from disk.</summary>
     public required ArtifactCheck Artifact { get; init; }
 

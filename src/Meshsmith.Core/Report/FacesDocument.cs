@@ -52,5 +52,7 @@ public sealed class Summary
     [JsonPropertyName("cylinders")] public int Cylinders { get; set; }
     [JsonPropertyName("cones")] public int Cones { get; set; }
     [JsonPropertyName("faceted_triangles")] public int FacetedTriangles { get; set; }
+    [JsonPropertyName("recon_coverage")] public double ReconCoverage { get; set; }
+    [JsonPropertyName("region_fallbacks")] public int RegionFallbacks { get; set; }
     [JsonPropertyName("edges")] public int Edges { get; set; }
 }
