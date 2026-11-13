@@ -37,6 +37,63 @@ public class RegionComponentsTests
         Assert.Single(RegionComponents.Group(mesh, topo, regions));
     }
 
+    /// <summary>
+    /// The phase's objective in one assertion: on a two-body part the classifier's own output must
+    /// group into two components, or the pipeline's per-body degradation has nothing to degrade.
+    /// Two tori are two bodies, and their unrecognised triangles are the only thing joining them.
+    /// </summary>
+    [Fact]
+    public void Classifier_output_of_a_two_body_part_groups_into_two_components()
+    {
+        var mesh = TwoTori();
+        var topo = MeshTopology.Build(mesh);
+        var regions = PrimitiveClassifier.Classify(mesh,
+            new PrimitiveClassifier.Options(Math.Clamp(2e-4 * mesh.Diagonal, 1e-3, 0.5), 12, 3));
+
+        var components = RegionComponents.Group(mesh, topo, regions);
+
+        Assert.Equal(2, components.Count);
+        Assert.All(components, c => Assert.Single(
+            c.SelectMany(r => regions[r].Triangles).Select(t => t < 576 ? 0 : 1).Distinct()));
+    }
+
+    /// <summary>Two tori, R = 10, r = 3, 24 x 12 segments, 40 mm apart: 1,152 triangles, two bodies.</summary>
+    private static MeshData TwoTori()
+    {
+        const int N = 24, M = 12;
+        const double R = 10, r = 3, gap = 40;
+
+        var vertices = new List<Vec3>();
+        var indices = new List<int>();
+
+        for (int body = 0; body < 2; body++)
+        {
+            int b = vertices.Count;
+            double dx = body * gap;
+            for (int i = 0; i < N; i++)
+            {
+                double u = 2 * Math.PI * i / N;
+                for (int j = 0; j < M; j++)
+                {
+                    double v = 2 * Math.PI * j / M;
+                    vertices.Add(new Vec3(dx + (R + r * Math.Cos(v)) * Math.Cos(u),
+                                          (R + r * Math.Cos(v)) * Math.Sin(u),
+                                          r * Math.Sin(v)));
+                }
+            }
+
+            int Id(int i, int j) => b + (i % N) * M + (j % M);
+            for (int i = 0; i < N; i++)
+                for (int j = 0; j < M; j++)
+                {
+                    indices.AddRange(new[] { Id(i, j), Id(i + 1, j), Id(i + 1, j + 1) });
+                    indices.AddRange(new[] { Id(i, j), Id(i + 1, j + 1), Id(i, j + 1) });
+                }
+        }
+
+        return new MeshData { Vertices = vertices.ToArray(), Indices = indices.ToArray() };
+    }
+
     private static ClassifiedRegion Region(int[] triangles) =>
         new(triangles, new FacetedPrimitive { Triangles = triangles.Length }, new Vec3(0, 0, 1), triangles.Length);
 
