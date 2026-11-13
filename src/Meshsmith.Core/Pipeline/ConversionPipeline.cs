@@ -197,6 +197,8 @@ public static class ConversionPipeline
                 if (ok) anyKept = true; else anyDropped = true;
             }
 
+            bool perBodyRebuilt = false;
+
             if (anyKept && anyDropped)
             {
                 faces.Clear();
@@ -223,9 +225,17 @@ public static class ConversionPipeline
 
                 options.Progress?.Invoke("sewing", 0.85);
                 sewed = SolidBuilder.SewRobust(faces, sewTol);
+                perBodyRebuilt = true;
             }
 
-            if (!sewed.IsValid)
+            // A body rebuilt per component that CLOSED is kept even when BRepCheck still objects. The
+            // defect sits inside a fully faceted component - the exact faceted fallback below reproduces
+            // the same closed-but-invalid compound on the same part (measured on IKI P1: 7 of 8 solids
+            // valid, the faceted one not) - so re-faceting cannot repair it, it only throws away the
+            // analytic faces the degradation just saved. An OPEN body is still replaced: a sew that did
+            // not close is exactly what facets do close. `perBodyRebuilt` keeps this relaxation off the
+            // single-body path, where a closed-but-invalid analytic shell must still fall back.
+            if (!sewed.IsValid && (!perBodyRebuilt || sewed.FreeEdges > 0))
             {
                 warnings.Add(sewed.FreeEdges > 0
                     ? $"analytic faces could not be sewn ({sewed.FreeEdges} free edges); " +
