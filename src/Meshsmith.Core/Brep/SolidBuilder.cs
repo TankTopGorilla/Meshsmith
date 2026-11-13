@@ -73,6 +73,28 @@ public static class SolidBuilder
         return new SolidResult(shape, shells.Count, freeEdges, valid, props.Mass, CountFaces(shape));
     }
 
+    /// <summary>
+    /// Sews at the requested tolerance and, when that leaves the shell open, retries at 2x, 4x and 8x.
+    /// A crack wider than the tolerance is the one failure a single sew cannot see: BRepBuilderAPI_Sewing
+    /// already cuts an edge at a T-junction vertex that lies on it (measured), and ShapeFix_Shape repairs
+    /// nothing on a sewn shell (measured: Perform() returns false), so the sewing tolerance is the only
+    /// knob that closes a real gap. Returns the best attempt, valid-and-closed if any rung got there.
+    /// </summary>
+    public static SolidResult SewRobust(IEnumerable<TopoDS_Face> faces, double tolerance)
+    {
+        var list = faces.ToList();
+        var best = Sew(list, tolerance);
+        if (best.IsValid && best.FreeEdges == 0) return best;
+
+        foreach (double factor in new[] { 2.0, 4.0, 8.0 })
+        {
+            var attempt = Sew(list, tolerance * factor);
+            if (attempt.IsValid && attempt.FreeEdges == 0) return attempt;
+            if (attempt.FreeEdges < best.FreeEdges || (attempt.IsValid && !best.IsValid)) best = attempt;
+        }
+        return best;
+    }
+
     private static int CountFaces(TopoDS_Shape shape)
     {
         int n = 0;

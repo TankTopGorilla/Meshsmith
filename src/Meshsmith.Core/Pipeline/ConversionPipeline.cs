@@ -168,7 +168,8 @@ public static class ConversionPipeline
 
         Mark("building");
         options.Progress?.Invoke("sewing", 0.75);
-        var sewed = SolidBuilder.Sew(faces, Math.Max(2 * tol, 1e-3));
+        var sewTol = Math.Max(2 * tol, 1e-3);
+        var sewed = SolidBuilder.SewRobust(faces, sewTol);
 
         if (!sewed.IsValid)
         {
@@ -190,7 +191,7 @@ public static class ConversionPipeline
             for (int i = 0; i < regions.Count; i++) AddFaceted(i, counted: false);
 
             options.Progress?.Invoke("sewing", 0.85);
-            sewed = SolidBuilder.Sew(faces, Math.Max(2 * tol, 1e-3));
+            sewed = SolidBuilder.SewRobust(faces, sewTol);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
