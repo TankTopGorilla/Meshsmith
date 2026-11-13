@@ -123,8 +123,37 @@ public static class CurveFitter2d
             if (d > tol) return false;
         }
 
-        a0 = Math.Atan2(run[0].V - cv, run[0].U - cu);
-        a1 = Math.Atan2(run[^1].V - cv, run[^1].U - cu);
+        // A Kasa circle passes through the run's interior points to within `tol`, but through its two
+        // ENDPOINTS only to within the residual - and BRepBuilderAPI_MakeEdge projects each vertex onto
+        // the pcurve at Precision::Confusion (1e-7), so a residual of 1e-6 is enough for it to throw
+        // BRepBuilderAPI_PointProjectionFailed and drop the whole region to facets (7 regions of
+        // clamp.stl). Every centre on the perpendicular bisector of the endpoints is equidistant from
+        // them, so slide the fitted centre onto that line and take the radius from an endpoint: the
+        // trimmed arc then passes through both vertices exactly, whatever the residual was.
+        var start = run[0];
+        var end = run[^1];
+        double mx = (start.U + end.U) / 2, my = (start.V + end.V) / 2;
+        double ex = end.U - start.U, ey = end.V - start.V;
+        double chord = Math.Sqrt(ex * ex + ey * ey);
+        if (chord > 1e-12)
+        {
+            double nx = -ey / chord, ny = ex / chord;
+            double slide = (cu - mx) * nx + (cv - my) * ny;
+            cu = mx + slide * nx;
+            cv = my + slide * ny;
+        }
+        r = Math.Sqrt((start.U - cu) * (start.U - cu) + (start.V - cv) * (start.V - cv));
+
+        // The slide moves the curve by at most the residual it removes. Refuse a fit that drifted past
+        // twice the tolerance and let the B-spline path take that run instead.
+        foreach (var p in run)
+        {
+            double d = Math.Abs(Math.Sqrt((p.U - cu) * (p.U - cu) + (p.V - cv) * (p.V - cv)) - r);
+            if (d > 2 * tol) return false;
+        }
+
+        a0 = Math.Atan2(start.V - cv, start.U - cu);
+        a1 = Math.Atan2(end.V - cv, end.U - cu);
         if (a1 <= a0) a1 += 2 * Math.PI;
 
         curve = new Geom2d_Circle(new gp_Ax2d(new gp_Pnt2d(cu, cv), new gp_Dir2d(1, 0)), r);
