@@ -46,6 +46,43 @@ public class SewLadderTests
     }
 
     [Fact]
+    public void Robust_sew_does_not_escalate_a_closed_but_invalid_shell()
+    {
+        List<TopoDS_Face> Cube(double x0, double y0, double z0)
+        {
+            double x1 = x0 + 10, y1 = y0 + 10, z1 = z0 + 10;
+            return new List<TopoDS_Face>
+            {
+                Quad(new gp_Pnt(x0, y0, z0), new gp_Pnt(x0, y1, z0), new gp_Pnt(x1, y1, z0), new gp_Pnt(x1, y0, z0)),
+                Quad(new gp_Pnt(x0, y0, z1), new gp_Pnt(x1, y0, z1), new gp_Pnt(x1, y1, z1), new gp_Pnt(x0, y1, z1)),
+                Quad(new gp_Pnt(x0, y0, z0), new gp_Pnt(x1, y0, z0), new gp_Pnt(x1, y0, z1), new gp_Pnt(x0, y0, z1)),
+                Quad(new gp_Pnt(x1, y0, z0), new gp_Pnt(x1, y1, z0), new gp_Pnt(x1, y1, z1), new gp_Pnt(x1, y0, z1)),
+                Quad(new gp_Pnt(x1, y1, z0), new gp_Pnt(x0, y1, z0), new gp_Pnt(x0, y1, z1), new gp_Pnt(x1, y1, z1)),
+                Quad(new gp_Pnt(x0, y1, z0), new gp_Pnt(x0, y0, z0), new gp_Pnt(x0, y0, z1), new gp_Pnt(x0, y1, z1))
+            };
+        }
+
+        // Three 10 mm cubes meeting on one shared vertical edge: the sew closes every edge, so
+        // nothing is free, but three faces on that edge make the shell non-manifold and invalid.
+        // Measured: free=0, valid=False, 18 faces, one shell, volume 1333.333 at 1x/2x/4x/8x alike.
+        var faces = LiftedBox(0);
+        faces.AddRange(Cube(-10, 0, 0));
+        faces.AddRange(Cube(0, -10, 0));
+
+        var tight = SolidBuilder.Sew(faces, 1e-6);
+        Assert.Equal(0, tight.FreeEdges);
+        Assert.False(tight.IsValid);
+
+        var robust = SolidBuilder.SewRobust(faces, 1e-6);
+
+        // the single sew's result, not a ladder rung: no tolerance can merge what is not free
+        Assert.Equal(tight.FreeEdges, robust.FreeEdges);
+        Assert.False(robust.IsValid);
+        Assert.Equal(tight.Faces, robust.Faces);
+        Assert.Equal(tight.Volume, robust.Volume, 3);
+    }
+
+    [Fact]
     public void Robust_sew_keeps_a_clean_box_valid()
     {
         var result = SolidBuilder.SewRobust(LiftedBox(0), 1e-6);

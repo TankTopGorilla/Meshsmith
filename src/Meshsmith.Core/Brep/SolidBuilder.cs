@@ -86,6 +86,12 @@ public static class SolidBuilder
         var best = Sew(list, tolerance);
         if (best.IsValid && best.FreeEdges == 0) return best;
 
+        // No free edges means there is nothing left for a wider tolerance to stitch: the seams are
+        // already joined and the remaining defect is topological (a non-manifold edge, an inverted
+        // face), which re-sewing cannot repair. The faceted fallback lands exactly here, and each
+        // rung it burned on clamp.stl re-sewed 5,784 faces for 2.2 s with nothing to show for it.
+        if (best.FreeEdges == 0) return best;
+
         foreach (double factor in new[] { 2.0, 4.0, 8.0 })
         {
             var attempt = Sew(list, tolerance * factor);
