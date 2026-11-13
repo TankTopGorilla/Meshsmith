@@ -70,6 +70,7 @@ public static class ConversionPipeline
         options.Progress?.Invoke("building", 0.55);
         var faces = new List<TopoDS_Face>(regions.Count);
         var faceRecords = new List<FaceRecord>(regions.Count);
+        var regionFaces = new List<TopoDS_Face>?[regions.Count];   // null => this region is faceted
         var triangleRegion = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();   // index into regions
         var triangleFace = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();     // id in faces.json
         var topo = MeshTopology.Build(mesh);
@@ -95,6 +96,7 @@ public static class ConversionPipeline
         void AddFaceted(int regionId, bool counted = true)
         {
             var target = regions[regionId];
+            regionFaces[regionId] = null;
             if (counted) regionFallbacks++;
             facetedTriangles += target.Triangles.Length;
             faces.AddRange(FacetedBuilder.Build(mesh, target.Triangles));
@@ -146,8 +148,10 @@ public static class ConversionPipeline
                 var uvTol = UvProjector.UvTolerance(region.Primitive, tol, MeanRadius(mesh, region));
                 var sampleTri = region.Triangles.OrderByDescending(mesh.Area).First();
 
-                faces.AddRange(FaceBuilder.Build(surface, region.Primitive, uv, uvTol,
-                                                 mesh.Centroid(sampleTri), mesh.Normal(sampleTri)));
+                var built = FaceBuilder.Build(surface, region.Primitive, uv, uvTol,
+                                              mesh.Centroid(sampleTri), mesh.Normal(sampleTri));
+                faces.AddRange(built);
+                regionFaces[id] = built;
 
                 foreach (var t in region.Triangles) triangleFace[t] = faceId;
                 faceRecords.Add(Record(faceId, region, mesh));
@@ -173,25 +177,72 @@ public static class ConversionPipeline
 
         if (!sewed.IsValid)
         {
-            // The analytic faces did not meet: a fitted surface and the exact facets next to it
-            // leave a gap the width of the fit residual, and the sewn shell keeps holes. The mesh
-            // itself is watertight, so a face per triangle is closed where the mixed body is not -
-            // a valid faceted solid beats a broken analytic one, which is what a CAD will refuse.
-            warnings.Add(sewed.FreeEdges > 0
-                ? $"analytic faces could not be sewn ({sewed.FreeEdges} free edges); " +
-                  "exported the exact faceted solid instead"
-                : "the analytic body did not pass the solid check; " +
-                  "exported the exact faceted solid instead");
+            // Per body, not per part. clamp.stl is four separate bodies; faceting all of them because one
+            // will not close throws away the analytic faces of the other three. A component that will not
+            // sew is replaced by its own exact triangles and the ones that closed keep their faces. This
+            // is only sound between bodies - a crack inside one body cannot be faceted away - so when
+            // every component fails the code falls through to the exact faceted solid below.
+            var components = RegionComponents.Group(mesh, topo, regions);
+            var keepAnalytic = new bool[regions.Count];
+            bool anyKept = false, anyDropped = false;
 
-            faces.Clear();
-            faceRecords.Clear();
-            triangleFace = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();
-            facetedTriangles = 0;
+            foreach (var component in components)
+            {
+                var componentFaces = new List<TopoDS_Face>();
+                foreach (int r in component)
+                    if (regionFaces[r] is { } builtFaces) componentFaces.AddRange(builtFaces);
 
-            for (int i = 0; i < regions.Count; i++) AddFaceted(i, counted: false);
+                bool ok = componentFaces.Count > 0 && SolidBuilder.SewRobust(componentFaces, sewTol).IsValid;
+                foreach (int r in component) keepAnalytic[r] = ok;
+                if (ok) anyKept = true; else anyDropped = true;
+            }
 
-            options.Progress?.Invoke("sewing", 0.85);
-            sewed = SolidBuilder.SewRobust(faces, sewTol);
+            if (anyKept && anyDropped)
+            {
+                faces.Clear();
+                faceRecords.Clear();
+                triangleFace = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();
+                facetedTriangles = 0;
+                regionFallbacks = 0;
+
+                for (int r = 0; r < regions.Count; r++)
+                {
+                    if (keepAnalytic[r] && regionFaces[r] is { } kept)
+                    {
+                        int faceId = faceRecords.Count;
+                        faces.AddRange(kept);
+                        foreach (var t in regions[r].Triangles) triangleFace[t] = faceId;
+                        faceRecords.Add(Record(faceId, regions[r], mesh));
+                    }
+                    else
+                    {
+                        warnings.Add($"region {r} fell back to faceted: its body did not sew");
+                        AddFaceted(r, counted: regionFaces[r] is not null);
+                    }
+                }
+
+                options.Progress?.Invoke("sewing", 0.85);
+                sewed = SolidBuilder.SewRobust(faces, sewTol);
+            }
+
+            if (!sewed.IsValid)
+            {
+                warnings.Add(sewed.FreeEdges > 0
+                    ? $"analytic faces could not be sewn ({sewed.FreeEdges} free edges); " +
+                      "exported the exact faceted solid instead"
+                    : "the analytic body did not pass the solid check; " +
+                      "exported the exact faceted solid instead");
+
+                faces.Clear();
+                faceRecords.Clear();
+                triangleFace = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();
+                facetedTriangles = 0;
+
+                for (int i = 0; i < regions.Count; i++) AddFaceted(i, counted: false);
+
+                options.Progress?.Invoke("sewing", 0.85);
+                sewed = SolidBuilder.SewRobust(faces, sewTol);
+            }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
