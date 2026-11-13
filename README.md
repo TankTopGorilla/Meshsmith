@@ -7,6 +7,8 @@ editable STEP AP214 or IGES 5.3 file.
 No network, no server, no account. The same input gives the same output, and every export is read back
 from disk and checked before the app calls it a success.
 
+![Meshsmith converting pin.stl: 274 triangles become a 4-face valid solid — 2 planes, 1 cylinder, 1 cone, in 0.52 s](docs/images/meshsmith-pin.png)
+
 ## Status
 
 - **0.1.4**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
