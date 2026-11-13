@@ -55,18 +55,11 @@ public static class PrimitiveClassifier
 
         var leftovers = Enumerable.Range(0, mesh.TriangleCount).Where(t => !assigned[t]).ToArray();
         if (leftovers.Length > 0)
-        {
-            // One region per connected patch of unrecognised triangles. A single leftovers region holds
-            // every body of a multi-body part, and RegionComponents.Group then reports ONE component for
-            // the whole part, so the per-body degradation has nothing to degrade (measured: clamp's
-            // 3,839 leftover triangles touch all four bodies).
-            foreach (var piece in ConnectedPieces(topo, leftovers))
-                result.Add(new ClassifiedRegion(piece,
-                    new FacetedPrimitive { Triangles = piece.Length, SourceTriangles = piece.Length },
-                    AverageNormal(mesh, piece), Area(mesh, piece)));
-        }
+            result.Add(new ClassifiedRegion(leftovers,
+                new FacetedPrimitive { Triangles = leftovers.Length, SourceTriangles = leftovers.Length },
+                AverageNormal(mesh, leftovers), Area(mesh, leftovers)));
 
-        return MergeSameSurface(mesh, result, options.Tolerance);
+        return SplitByConnectivity(mesh, topo, MergeSameSurface(mesh, result, options.Tolerance));
     }
 
     public static Primitive? FitRegion(MeshData mesh, int[] triangles, double tol, double diag)
@@ -195,4 +188,29 @@ public static class PrimitiveClassifier
         primitive is FacetedPrimitive
             ? new FacetedPrimitive { Triangles = triangles, SourceTriangles = triangles }
             : primitive with { SourceTriangles = triangles };
+
+    /// <summary>
+    /// Splits every region into the connected patches it really is. A region is built from grown seeds
+    /// and from coplanar merges, and neither looks at the mesh: MergeSameSurface joins two faces that
+    /// lie on the same plane even when they belong to different bodies, and the leftover region holds
+    /// every unrecognised triangle of the part. One region becomes one face, and a face has to be a
+    /// single connected patch - so both cases are split before the pipeline sees them. Without this,
+    /// RegionComponents.Group reports one component for a whole multi-body part (measured on clamp,
+    /// IKI P1, IKI Part 1 and ATLAS) and the per-body degradation never engages.
+    /// </summary>
+    private static List<ClassifiedRegion> SplitByConnectivity(MeshData mesh, MeshTopology topo,
+                                                             List<ClassifiedRegion> regions)
+    {
+        var split = new List<ClassifiedRegion>(regions.Count);
+        foreach (var region in regions)
+        {
+            foreach (var piece in ConnectedPieces(topo, region.Triangles))
+            {
+                if (piece.Length == region.Triangles.Length) { split.Add(region); continue; }
+                split.Add(new ClassifiedRegion(piece, Reprime(region.Primitive, piece.Length),
+                                               AverageNormal(mesh, piece), Area(mesh, piece)));
+            }
+        }
+        return split;
+    }
 }

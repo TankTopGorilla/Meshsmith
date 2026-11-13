@@ -46,6 +46,23 @@ public class PrimitiveClassifierSplitTests
         Assert.Equal(12, regions.Sum(r => r.Triangles.Length));
     }
 
+    /// <summary>
+    /// Two cubes sitting on the same z = 0 plane: MergeSameSurface joins their bottom faces into ONE
+    /// plane region, and that region is what welds the two bodies together in RegionComponents.Group.
+    /// Measured today: 8 regions, 4 of them spanning both bodies, Group = 1 component.
+    /// </summary>
+    [Fact]
+    public void Coplanar_faces_of_two_bodies_are_not_merged_into_one_region()
+    {
+        var (mesh, _) = TwoCubes(gap: 20);
+        var topo = MeshTopology.Build(mesh);
+        var regions = PrimitiveClassifier.Classify(mesh, Options(mesh));
+
+        // Cube 0 owns triangles 0..11, cube 1 owns 12..23.
+        Assert.DoesNotContain(regions, r => r.Triangles.Select(t => t < 12 ? 0 : 1).Distinct().Count() > 1);
+        Assert.Equal(2, RegionComponents.Group(mesh, topo, regions).Count);
+    }
+
     private static int BodyOf(int triangle) => triangle < TrianglesPerTorus ? 0 : 1;
 
     /// <summary>The pipeline's own tolerance, so the fixture is classified the way a real part is.</summary>
