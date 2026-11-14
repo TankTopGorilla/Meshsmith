@@ -10,6 +10,11 @@ public sealed class ConversionReport
     [JsonPropertyName("faceted_triangles")] public int FacetedTriangles { get; set; }
     [JsonPropertyName("fit_tolerance")] public double FitTolerance { get; set; }
     [JsonPropertyName("surface_deviation")] public double SurfaceDeviation { get; set; }
+
+    // R4: what a decimation erased, in fit tolerances. 0 when none ran - older report.json files stay
+    // readable, the same rule the R3 surface-kind fields follow.
+    [JsonPropertyName("decimate_from_triangles")] public int DecimateFromTriangles { get; set; }
+    [JsonPropertyName("decimate_deviation")] public double DecimateDeviation { get; set; }
     [JsonPropertyName("recon_coverage")] public double ReconCoverage { get; set; }
     [JsonPropertyName("region_fallbacks")] public int RegionFallbacks { get; set; }
     [JsonPropertyName("warnings")] public List<string> Warnings { get; set; } = new();

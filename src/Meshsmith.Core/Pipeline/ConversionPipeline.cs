@@ -363,7 +363,9 @@ public static class ConversionPipeline
                 FacetedTriangles = facetedTriangles,
                 ReconCoverage = recon.Coverage,
                 RegionFallbacks = regionFallbacks,
-                Edges = CountEdges(sewed.Shape)
+                Edges = CountEdges(sewed.Shape),
+                DecimateFromTriangles = decimationFrom,
+                DecimateDeviation = decimationDeviation
             }
         };
         var facesPath = Path.Combine(work, "part-faces.json");
@@ -396,6 +398,8 @@ public static class ConversionPipeline
                 FacetedTriangles = facetedTriangles,
                 FitTolerance = tol,
                 SurfaceDeviation = deviation,
+                DecimateFromTriangles = decimationFrom,
+                DecimateDeviation = decimationDeviation,
                 ReconCoverage = recon.Coverage,
                 RegionFallbacks = regionFallbacks,
                 Warnings = warnings,

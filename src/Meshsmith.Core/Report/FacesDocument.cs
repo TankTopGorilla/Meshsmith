@@ -59,4 +59,9 @@ public sealed class Summary
     [JsonPropertyName("recon_coverage")] public double ReconCoverage { get; set; }
     [JsonPropertyName("region_fallbacks")] public int RegionFallbacks { get; set; }
     [JsonPropertyName("edges")] public int Edges { get; set; }
+
+    // R4: present only when a decimation ran, 0 otherwise - the R3 rule, so every faces.json written
+    // before decimation existed still deserialises.
+    [JsonPropertyName("decimate_from_triangles")] public int DecimateFromTriangles { get; set; }
+    [JsonPropertyName("decimate_deviation")] public double DecimateDeviation { get; set; }
 }
