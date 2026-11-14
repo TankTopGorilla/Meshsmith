@@ -65,12 +65,69 @@ public static class SolidBuilder
         {
             var unifier = new ShapeUpgrade_UnifySameDomain(shape, true, true, false);
             unifier.Build();
-            shape = unifier.Shape;
+            shape = MergeOrKeepExact(unifier.Shape, shape);
             BRepGProp.VolumeProperties(shape, out props);
         }
 
         bool valid = new BRepCheck_Analyzer(shape).IsValid();
         return new SolidResult(shape, shells.Count, freeEdges, valid, props.Mass, CountFaces(shape));
+    }
+
+    /// <summary>
+    /// Takes the merged shape only if it passes the checker. The merge can BUILD a defect the facets
+    /// did not have: a coplanar region that is not a disc is merged into one face whose boundary
+    /// touches itself, and BRepCheck reports the wire as self-intersecting and the face as
+    /// unorientable. Measured on clamp.stl body 0 - the exact 5,076-facet shell is valid, the merged
+    /// 3,788-face solid is not. The old code assigned the merged shape unchecked, so the pipeline
+    /// discarded a valid faceted body and the part exited 5.
+    ///
+    /// A per-shell ShapeFix_Shell repairs it (FixFaceMode is what rebuilds the merged face's wires;
+    /// ShapeFix_Shape alone does not, measured). When even that fails, the exact facets are returned:
+    /// they are closed and valid - that is the precondition for getting here - so the fallback can
+    /// only be more correct than a broken merge.
+    /// </summary>
+    private static TopoDS_Shape MergeOrKeepExact(TopoDS_Shape merged, TopoDS_Shape exact)
+    {
+        if (new BRepCheck_Analyzer(merged).IsValid()) return merged;
+
+        var repaired = new List<TopoDS_Shape>();
+        var shells = new TopExp_Explorer(merged, TopAbs_ShapeEnum.TopAbs_SHELL);
+        while (shells.More)
+        {
+            var fixer = new ShapeFix_Shell((TopoDS_Shell)shells.Current)
+            {
+                FixFaceMode = 1,
+                FixOrientationMode = 1
+            };
+            fixer.Perform();
+
+            var fixedShells = new List<TopoDS_Shell>();
+            var inner = new TopExp_Explorer(fixer.Shape, TopAbs_ShapeEnum.TopAbs_SHELL);
+            while (inner.More) { fixedShells.Add((TopoDS_Shell)inner.Current); inner.Next(); }
+
+            if (fixedShells.Count == 1)
+            {
+                var maker = new BRepBuilderAPI_MakeSolid(fixedShells[0]);
+                repaired.Add(maker.IsDone ? maker.Solid : fixer.Shape);
+            }
+            else repaired.Add(fixer.Shape);
+
+            shells.Next();
+        }
+
+        if (repaired.Count == 0) return exact;
+
+        TopoDS_Shape candidate;
+        if (repaired.Count == 1) candidate = repaired[0];
+        else
+        {
+            var builder = new BRep_Builder();
+            builder.MakeCompound(out var compound);
+            foreach (var one in repaired) builder.Add(compound, one);
+            candidate = compound;
+        }
+
+        return new BRepCheck_Analyzer(candidate).IsValid() ? candidate : exact;
     }
 
     /// <summary>
