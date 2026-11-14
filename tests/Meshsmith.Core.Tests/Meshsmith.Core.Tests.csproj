@@ -28,6 +28,16 @@
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../fixtures/reference_sample.step" Link="fixtures/reference_sample.step" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../fixtures/clamp_body0.stl" Link="fixtures/clamp_body0.stl" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/cube_10.glb" Link="fixtures/import/cube_10.glb" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/cube_10.gltf" Link="fixtures/import/cube_10.gltf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/cube_10.bin" Link="fixtures/import/cube_10.bin" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/cube_metres.glb" Link="fixtures/import/cube_metres.glb" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/strip.gltf" Link="fixtures/import/strip.gltf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/fan.gltf" Link="fixtures/import/fan.gltf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/inst.gltf" Link="fixtures/import/inst.gltf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/moved.gltf" Link="fixtures/import/moved.gltf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/points_lines.gltf" Link="fixtures/import/points_lines.gltf" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/draco.glb" Link="fixtures/import/draco.glb" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

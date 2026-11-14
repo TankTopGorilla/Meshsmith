@@ -55,7 +55,8 @@ public static class MeshReaderRegistry
 
     private static readonly IMeshReader[] DefaultReaders =
     {
-        new StlMeshReader()
+        new StlMeshReader(),
+        new GltfMeshReader()
     };
 
     public static IReadOnlyList<IMeshReader> Readers => DefaultReaders;

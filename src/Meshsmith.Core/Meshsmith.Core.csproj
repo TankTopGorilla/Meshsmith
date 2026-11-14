@@ -9,5 +9,8 @@
   <ItemGroup>
     <PackageReference Include="Occt.NET" Version="7.9.0" />
     <PackageReference Include="geometry3Sharp" Version="1.0.324" />
+    <!-- glTF/GLB import. net8 asset, no transitive System.Text.Json on net8 (that dependency is in
+         the netstandard groups only), MIT. -->
+    <PackageReference Include="SharpGLTF.Core" Version="1.0.7" />
   </ItemGroup>
 </Project>

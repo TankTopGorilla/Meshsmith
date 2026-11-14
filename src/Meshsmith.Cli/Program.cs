@@ -57,13 +57,24 @@ internal static class Program
             return 2;
         }
 
-        var result = Meshsmith.Core.Pipeline.ConversionPipeline.Run(input,
-            new Meshsmith.Core.Pipeline.ConversionOptions
-            {
-                VerifyFaceLimit = verifyAll ? int.MaxValue : 4000,
-                ForceDecimate = decimate,
-                DecimateTarget = decimateTarget
-            });
+        Meshsmith.Core.Pipeline.ConversionResult result;
+        try
+        {
+            result = Meshsmith.Core.Pipeline.ConversionPipeline.Run(input,
+                new Meshsmith.Core.Pipeline.ConversionOptions
+                {
+                    VerifyFaceLimit = verifyAll ? int.MaxValue : 4000,
+                    ForceDecimate = decimate,
+                    DecimateTarget = decimateTarget
+                });
+        }
+        catch (Exception ex) when (ex is Meshsmith.Core.Import.MeshFormatException
+                                        or Meshsmith.Core.Mesh.StlFormatException)
+        {
+            // An honest failure is one line with a non-zero exit - never a stack trace.
+            Console.Error.WriteLine($"error: {ex.Message}");
+            return 1;
+        }
 
         output ??= Path.ChangeExtension(input, ".step");
         File.Copy(result.StepPath, output, overwrite: true);
