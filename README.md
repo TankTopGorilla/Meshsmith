@@ -1,8 +1,8 @@
 # Meshsmith
 
 An offline **STL → STEP / IGES** converter for mechanical parts. It reads a triangle mesh, finds the
-analytic surfaces inside it (planes, cylinders, cones), trims and sews them into a solid, and writes an
-editable STEP AP214 or IGES 5.3 file.
+analytic surfaces inside it (planes, cylinders, cones, tori, spheres), trims and sews them into a
+solid, and writes an editable STEP AP214 or IGES 5.3 file.
 
 No network, no server, no account. The same input gives the same output, and every export is read back
 from disk and checked before the app calls it a success.
@@ -13,7 +13,7 @@ from disk and checked before the app calls it a success.
 
 - **0.1.4**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
 - **6 of 6** real test parts convert to a valid solid; 0 crashes.
-- `Meshsmith.Core` 69 tests, `Meshsmith.App` 140 tests.
+- `Meshsmith.Core` 91 tests, `Meshsmith.App` 140 tests.
 - **R1.2**, measured through the CLI: IKI KATLI MONT P1 and Part 2 now export **2,024 faces** (was
   2,784) as 8 solids at 96.8 % analytic coverage, `artifact=verified`; `pin.stl` is unchanged at
   4 faces, valid.
@@ -23,6 +23,18 @@ from disk and checked before the app calls it a success.
   solid, and `ShapeUpgrade_UnifySameDomain` was turning it into an invalid one by merging a coplanar
   jaw region that is not a disc. `SolidBuilder` now verifies the merge and repairs it with
   `ShapeFix_Shell`, keeping the exact facets if that also fails.
+- **R3**, measured through the CLI: a synthetic **two-torus** part (2 bodies, 8,192 triangles) now
+  classifies **100.0 % as torus** with `faceted=0`, and exports **4 faces, 2 solids, `valid=True`,
+  `artifact=verified`** — exact volume 3,553.06 mm³. Tori are fitted *after* cone (a sphere fit
+  accepts a cylinder and a cone exactly, so trying it earlier drops `pin.stl` from 100 % to 32.5 %)
+  and the sphere fit carries a latitude guard, because two concentric circles are exactly a sphere.
+  No real part moved: `pin.stl` 4 faces / 100 %, `clamp.stl` 4,444 / 34.3 %,
+  `IKI KATLI MONT P1` 2,024 / 96.8 %, `IKI KATLI MONT` 7,266 / 99.2 %, `ATLAS` 935 / 64.7 %.
+- **R3, the honest half:** `clamp.stl`'s 3,372-triangle leftover is **not** a torus, not a sphere and
+  not a surface of revolution about *any* axis — the best of 2,000 candidate axes leaves a
+  meridional residual of 7.96 mm against a 0.012 mm tolerance (666×), and an unconstrained torus fit
+  over 500 axis starts bottoms out at 10.75 mm. Clamp's coverage half of the R1 gate is therefore
+  **not reachable** by adding primitives; it needs segmentation work, not a new surface.
 
 ## Requirements
 
@@ -45,7 +57,8 @@ The OCCT native payload is copied next to the executables by the build; nothing 
 
 1. **Read and weld** the STL into a shared-vertex mesh, then repair it (degenerate triangles, exact
    duplicate faces, winding, holes on manifold surfaces). Every change is counted and reported.
-2. **Classify** the mesh into regions and fit a primitive to each (plane, cylinder, cone).
+2. **Classify** the mesh into regions and fit a primitive to each (plane, cylinder, cone, torus,
+   sphere).
 3. **Build** trimmed OCCT faces for the regions and **sew** them into a solid. If the analytic body does
    not close, the exact faceted solid is exported instead and the reason is reported.
 4. **Write** STEP and IGES, then **read the file back** and compare face count, volume and validity.
