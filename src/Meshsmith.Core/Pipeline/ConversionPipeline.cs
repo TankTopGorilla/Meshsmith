@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Meshsmith.Core.Brep;
 using Meshsmith.Core.Export;
 using Meshsmith.Core.Fit;
@@ -91,6 +91,9 @@ public static class ConversionPipeline
                                       // would not sew). A region the classifier never made analytic did
                                       // not fall back, and neither did the all-or-nothing path - the
                                       // `faceted` count already shows that one.
+        bool closedFaces = false;     // a region used ClosedFaceBuilder: its patches must NOT be merged
+                                      // back into one doubly-periodic face (measured: the merged face
+                                      // writes an empty STEP)
 
         // A region that was never analytic, or one OCCT refuses to trim, becomes one face per triangle.
         void AddFaceted(int regionId, bool counted = true)
@@ -138,18 +141,36 @@ public static class ConversionPipeline
             {
                 var surface = SurfaceFactory.Create(region.Primitive);
                 var loops = BoundaryLoops.Extract(mesh, topo, region.Triangles);
-                var uv = new List<(double U, double V)[]>(loops.Count);
-                foreach (var loop in loops)
+                var sampleTri = region.Triangles.OrderByDescending(mesh.Area).First();
+                var samplePoint = mesh.Centroid(sampleTri);
+                var sampleNormal = mesh.Normal(sampleTri);
+
+                List<TopoDS_Face> built;
+
+                if (loops.Count == 0)
                 {
-                    var pts = loop.Select(i => mesh.Vertices[i]).ToArray();
-                    uv.Add(UvProjector.Project(surface, pts));
+                    // A CLOSED torus or sphere body has no boundary at all. FaceBuilder throws "face
+                    // has no boundary" for it, and the old path then faceted the whole body. The
+                    // measured repair is the region's own uv bounding box, split once per periodic
+                    // direction: one natural-bounds face sews to zero shells, any 2-way split sews to
+                    // a valid solid with the exact volume.
+                    built = ClosedFaceBuilder.Build(region.Primitive, surface, mesh, region.Triangles,
+                                                     tol, samplePoint, sampleNormal);
+                    closedFaces = true;
+                }
+                else
+                {
+                    var uv = new List<(double U, double V)[]>(loops.Count);
+                    foreach (var loop in loops)
+                    {
+                        var pts = loop.Select(i => mesh.Vertices[i]).ToArray();
+                        uv.Add(UvProjector.Project(surface, pts));
+                    }
+
+                    var uvTol = UvProjector.UvTolerance(region.Primitive, tol, MeanRadius(mesh, region));
+                    built = FaceBuilder.Build(surface, region.Primitive, uv, uvTol, samplePoint, sampleNormal);
                 }
 
-                var uvTol = UvProjector.UvTolerance(region.Primitive, tol, MeanRadius(mesh, region));
-                var sampleTri = region.Triangles.OrderByDescending(mesh.Area).First();
-
-                var built = FaceBuilder.Build(surface, region.Primitive, uv, uvTol,
-                                              mesh.Centroid(sampleTri), mesh.Normal(sampleTri));
                 faces.AddRange(built);
                 regionFaces[id] = built;
 
@@ -173,7 +194,7 @@ public static class ConversionPipeline
         Mark("building");
         options.Progress?.Invoke("sewing", 0.75);
         var sewTol = Math.Max(2 * tol, 1e-3);
-        var sewed = SolidBuilder.SewRobust(faces, sewTol);
+        var sewed = SolidBuilder.SewRobust(faces, sewTol, unify: !closedFaces);
 
         if (!sewed.IsValid)
         {
@@ -192,7 +213,7 @@ public static class ConversionPipeline
                 foreach (int r in component)
                     if (regionFaces[r] is { } builtFaces) componentFaces.AddRange(builtFaces);
 
-                bool ok = componentFaces.Count > 0 && SolidBuilder.SewRobust(componentFaces, sewTol).IsValid;
+                bool ok = componentFaces.Count > 0 && SolidBuilder.SewRobust(componentFaces, sewTol, unify: !closedFaces).IsValid;
                 foreach (int r in component) keepAnalytic[r] = ok;
                 if (ok) anyKept = true; else anyDropped = true;
             }
@@ -224,7 +245,7 @@ public static class ConversionPipeline
                 }
 
                 options.Progress?.Invoke("sewing", 0.85);
-                sewed = SolidBuilder.SewRobust(faces, sewTol);
+                sewed = SolidBuilder.SewRobust(faces, sewTol, unify: !closedFaces);
                 perBodyRebuilt = true;
             }
 
@@ -251,7 +272,7 @@ public static class ConversionPipeline
                 for (int i = 0; i < regions.Count; i++) AddFaceted(i, counted: false);
 
                 options.Progress?.Invoke("sewing", 0.85);
-                sewed = SolidBuilder.SewRobust(faces, sewTol);
+                sewed = SolidBuilder.SewRobust(faces, sewTol, unify: !closedFaces);
             }
         }
 

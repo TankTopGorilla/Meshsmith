@@ -6,7 +6,7 @@ public sealed record SolidResult(TopoDS_Shape Shape, int Shells, int FreeEdges, 
 
 public static class SolidBuilder
 {
-    public static SolidResult Sew(IEnumerable<TopoDS_Face> faces, double tolerance)
+    public static SolidResult Sew(IEnumerable<TopoDS_Face> faces, double tolerance, bool unify = true)
     {
         var list = faces.ToList();
         if (list.Count == 0) throw new InvalidOperationException("no faces to sew");
@@ -60,8 +60,14 @@ public static class SolidBuilder
         // of the whole process on real parts (exit code 0xC0000005), and every body it died on was
         // one the sews had left broken anyway. Unifying a broken body buys nothing; the pipeline
         // replaces it, so the pass is skipped there and the crash never happens.
+        //
+        // `unify: false` is for a CLOSED torus/sphere body. Measured on a two-torus part: merging its
+        // two half-period torus faces gives ONE face periodic in both parameters that BRepCheck calls
+        // valid, but the STEP writer transfers nothing for it and the export reads back as an empty
+        // file (1,675 bytes, "no transferable shape"), while the same faces left unmerged write
+        // 14,671 bytes and verify. The merge is an optimisation; the unmerged patches are exact.
         var validity = new BRepCheck_Analyzer(shape);
-        if (validity.IsValid())
+        if (unify && validity.IsValid())
         {
             var unifier = new ShapeUpgrade_UnifySameDomain(shape, true, true, false);
             unifier.Build();
@@ -137,10 +143,10 @@ public static class SolidBuilder
     /// nothing on a sewn shell (measured: Perform() returns false), so the sewing tolerance is the only
     /// knob that closes a real gap. Returns the best attempt, valid-and-closed if any rung got there.
     /// </summary>
-    public static SolidResult SewRobust(IEnumerable<TopoDS_Face> faces, double tolerance)
+    public static SolidResult SewRobust(IEnumerable<TopoDS_Face> faces, double tolerance, bool unify = true)
     {
         var list = faces.ToList();
-        var best = Sew(list, tolerance);
+        var best = Sew(list, tolerance, unify);
         if (best.IsValid && best.FreeEdges == 0) return best;
 
         // No free edges means there is nothing left for a wider tolerance to stitch: the seams are
@@ -151,7 +157,7 @@ public static class SolidBuilder
 
         foreach (double factor in new[] { 2.0, 4.0, 8.0 })
         {
-            var attempt = Sew(list, tolerance * factor);
+            var attempt = Sew(list, tolerance * factor, unify);
             if (attempt.IsValid && attempt.FreeEdges == 0) return attempt;
             if (attempt.FreeEdges < best.FreeEdges || (attempt.IsValid && !best.IsValid)) best = attempt;
         }
