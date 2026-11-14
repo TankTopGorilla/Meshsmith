@@ -38,6 +38,8 @@
     <None Include="../../fixtures/import/moved.gltf" Link="fixtures/import/moved.gltf" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../fixtures/import/points_lines.gltf" Link="fixtures/import/points_lines.gltf" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../fixtures/import/draco.glb" Link="fixtures/import/draco.glb" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/cube_10.fbx" Link="fixtures/import/cube_10.fbx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/import/empty.fbx" Link="fixtures/import/empty.fbx" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

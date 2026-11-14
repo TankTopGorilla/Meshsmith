@@ -41,11 +41,11 @@ public sealed class ConversionOptions
     /// only way to exercise the path on a small part.</summary>
     public bool ForceDecimate { get; init; }
 
-    /// <summary>The user's claim that a file's numbers are already millimetres. Formats whose unit is
-    /// undecidable (FBX from Blender) only convert when this is false, and always say which way they
-    /// went. Ignored by formats that declare their unit (glTF is metres by spec) except to override
-    /// that declaration - which is why the note prints what was actually applied.</summary>
-    public bool TreatNumbersAsMillimetres { get; init; }
+    /// <summary>The user's claim that a file's numbers are already millimetres. <c>null</c> - the
+    /// default - leaves the decision to the format: glTF is metres by spec (x1000), FBX declares
+    /// nothing and is taken as millimetres (x1). <c>false</c> says the numbers are metres, which is
+    /// the only override a unit-less format needs.</summary>
+    public bool? TreatNumbersAsMillimetres { get; init; }
 
     /// <summary>Byte-level read progress, 0..1. Separate from <see cref="Progress"/>, which is the
     /// stage percentage: a 386 k STL and a 12-triangle one differ hugely here and not at all there.</summary>

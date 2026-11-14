@@ -68,8 +68,8 @@ public class PipelineImportTests
             new ConversionOptions { Readers = new IMeshReader[] { asMm }, TreatNumbersAsMillimetres = true });
 
         // The setting has to reach the reader - only the reader knows what the format declared.
-        Assert.False(asMetres.Seen!.TreatNumbersAsMillimetres);
-        Assert.True(asMm.Seen!.TreatNumbersAsMillimetres);
+        Assert.False(asMetres.Seen!.TreatNumbersAsMillimetres == true);
+        Assert.True(asMm.Seen!.TreatNumbersAsMillimetres == true);
 
         // ...and what it decided has to reach the result, both number and sentence.
         Assert.Equal(1000.0, metresResult.AppliedScale);
@@ -107,7 +107,8 @@ public class PipelineImportTests
         string raw = stdout + stderr;
 
         Assert.Equal(0, process.ExitCode);
-        Assert.Contains(raw.Split('\n'), line => line.TrimEnd('\r') == "format=STL units=\"STL · millimetres\"");
+        Assert.Contains(raw.Split('\n'), line => line.TrimEnd('\r') == "format=STL");
+        Assert.Contains(raw.Split('\n'), line => line.TrimEnd('\r') == "units=\"STL · millimetres\"");
     }
 
     // ---- helpers ----------------------------------------------------------------
@@ -131,8 +132,8 @@ public class PipelineImportTests
             {
                 Soup = StlReader.Read(path),
                 Format = Format,
-                UnitNote = options.TreatNumbersAsMillimetres ? "fake · treated as mm" : "fake · metres · ×1000",
-                AppliedScale = options.TreatNumbersAsMillimetres ? 1.0 : 1000.0,
+                UnitNote = options.TreatNumbersAsMillimetres == true ? "fake · treated as mm" : "fake · metres · ×1000",
+                AppliedScale = options.TreatNumbersAsMillimetres == true ? 1.0 : 1000.0,
                 Warnings = { "a warning from the reader" }
             };
         }

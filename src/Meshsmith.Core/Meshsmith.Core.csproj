@@ -12,5 +12,8 @@
     <!-- glTF/GLB import. net8 asset, no transitive System.Text.Json on net8 (that dependency is in
          the netstandard groups only), MIT. -->
     <PackageReference Include="SharpGLTF.Core" Version="1.0.7" />
+    <!-- FBX import. Managed wrapper + assimp.dll under runtimes/win-x64/native (MIT wrapper, Apache-2.0
+         assimp). Assimp is FBX-only here: the same build reads 0 meshes from a glTF 2.0 file. -->
+    <PackageReference Include="AssimpNet" Version="4.1.0" />
   </ItemGroup>
 </Project>

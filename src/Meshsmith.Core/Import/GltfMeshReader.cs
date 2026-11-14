@@ -63,8 +63,8 @@ public sealed class GltfMeshReader : IMeshReader
         if (scene is null)
             throw new MeshFormatException($"'{name}' holds no scene to read", "no scene");
 
-        double scale = options.TreatNumbersAsMillimetres ? 1.0 : 1000.0;
-        string note = options.TreatNumbersAsMillimetres
+        double scale = options.TreatNumbersAsMillimetres == true ? 1.0 : 1000.0;
+        string note = options.TreatNumbersAsMillimetres == true
             ? "glTF · metres · ×1 (treated as mm)"
             : "glTF · metres · ×1000";
 

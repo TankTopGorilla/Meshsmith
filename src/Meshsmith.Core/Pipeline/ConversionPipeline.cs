@@ -110,9 +110,10 @@ public static class ConversionPipeline
         var triangleFace = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();     // id in faces.json
         var topo = MeshTopology.Build(mesh);
 
-        // What the reader had to skip or assume leads the warnings: it is about the input, and a unit
-        // assumption changes every number downstream.
-        var warnings = new List<string>(read.Warnings);
+        // The reader's own warnings travel in ImportWarnings: they are about the input file (a unit
+        // assumption changes every number downstream), and keeping the two lists apart is what stops
+        // the CLI printing each one twice.
+        var warnings = new List<string>();
 
         var health = MeshHealth.Measure(mesh, topo);
         if (!health.IsWatertight)
@@ -415,7 +416,7 @@ public static class ConversionPipeline
                 DecimateDeviation = decimationDeviation,
                 ReconCoverage = recon.Coverage,
                 RegionFallbacks = regionFallbacks,
-                Warnings = warnings,
+                Warnings = warnings.Concat(read.Warnings).ToList(),
                 ArtifactStatus = artifact.Status.ToString(),
                 ArtifactDetail = artifact.Detail,
                 Repair = new Dictionary<string, int>

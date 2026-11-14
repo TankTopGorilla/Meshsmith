@@ -11,9 +11,12 @@ public sealed record MeshReadOptions
     /// Default 1000 for metric scene formats; 1 when the user says "these numbers are mm".</summary>
     public double UnitToMillimetres { get; init; } = 1.0;
 
-    /// <summary>The user's claim that the file's numbers are already millimetres. Formats whose unit
-    /// is undecidable (FBX from Blender) convert only when this is false.</summary>
-    public bool TreatNumbersAsMillimetres { get; init; }
+    /// <summary>The user's claim that the file's numbers are already millimetres.
+    /// <c>null</c> - the default - means "no claim": the format's own default applies, which is metres
+    /// for glTF (x1000) and millimetres for FBX (x1, because a Blender FBX declares no unit at all).
+    /// <c>false</c> means the user says the numbers are metres, so a format without a declared unit
+    /// converts x1000.</summary>
+    public bool? TreatNumbersAsMillimetres { get; init; }
 }
 
 /// <summary>What a reader recovered: the soup, and the facts that make the numbers auditable.</summary>
@@ -56,7 +59,8 @@ public static class MeshReaderRegistry
     private static readonly IMeshReader[] DefaultReaders =
     {
         new StlMeshReader(),
-        new GltfMeshReader()
+        new GltfMeshReader(),
+        new FbxMeshReader()
     };
 
     public static IReadOnlyList<IMeshReader> Readers => DefaultReaders;
