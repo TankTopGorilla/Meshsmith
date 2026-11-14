@@ -13,11 +13,16 @@ from disk and checked before the app calls it a success.
 
 - **0.1.4**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
 - **6 of 6** real test parts convert to a valid solid; 0 crashes.
-- `Meshsmith.Core` 66 tests, `Meshsmith.App` 140 tests.
+- `Meshsmith.Core` 69 tests, `Meshsmith.App` 140 tests.
 - **R1.2**, measured through the CLI: IKI KATLI MONT P1 and Part 2 now export **2,024 faces** (was
-  2,784) as 8 solids at 96.8 % analytic coverage, `artifact=verified`; `clamp.stl` is unchanged at
-  4,444 faces, exit 5 (33.6 % coverage — it has no fully analytic body to save); `pin.stl` is
-  unchanged at 4 faces, valid.
+  2,784) as 8 solids at 96.8 % analytic coverage, `artifact=verified`; `pin.stl` is unchanged at
+  4 faces, valid.
+- **R1.3**, measured through the CLI: `clamp.stl` now exports **4,444 faces, `valid=True`,
+  `artifact=verified`, exit 0** (33.6 % coverage — every clamp body is faceted, so the face count is
+  the fallback's). The faceted body was never the problem: its exact 5,076-triangle shell is a valid
+  solid, and `ShapeUpgrade_UnifySameDomain` was turning it into an invalid one by merging a coplanar
+  jaw region that is not a disc. `SolidBuilder` now verifies the merge and repairs it with
+  `ShapeFix_Shell`, keeping the exact facets if that also fails.
 
 ## Requirements
 
