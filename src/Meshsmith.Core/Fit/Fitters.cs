@@ -137,6 +137,168 @@ public static class Fitters
         };
     }
 
+    /// <summary>
+    /// Torus: axis first, then the two radii.
+    ///
+    /// The axis is the LARGEST-eigenvector direction of sum(n n^T), not the smallest: a torus's
+    /// normals satisfy n.A = sin v (variance 1/2) while every direction in the tube's own plane gives
+    /// variance 1/4, so the axis is the direction the normals agree on MOST. This is the opposite of
+    /// a cylinder and it is why FitCylinder must not be reused here.
+    ///
+    /// With the axis fixed, p.A = d + r (n.A) is linear in the two signed distances (d = the axis
+    /// offset, r = the minor radius). Then q = p - r n lies exactly on the tube-centre circle, so a
+    /// Kasa circle fit in the plane perpendicular to A gives the centre and R.
+    /// </summary>
+    public static TorusPrimitive? FitTorus(IReadOnlyList<Vec3> pts, IReadOnlyList<Vec3> normals,
+                                           double tol, double diag)
+    {
+        // A torus needs the whole tube: measured, a 48x24 torus patch never fills one (30 vertices is
+        // the point where the Kasa circle below becomes determined, 16 is not).
+        if (pts.Count < 32) return null;
+        if (!TryMaxDirection(normals, out var axis)) return null;
+
+        double s11 = 0, s12 = 0, s22 = 0, t1 = 0, t2 = 0;
+        for (int i = 0; i < pts.Count; i++)
+        {
+            double nA = Vec3.Dot(normals[i], axis), pA = Vec3.Dot(pts[i], axis);
+            s11 += nA * nA; s12 += nA; s22 += 1;
+            t1 += nA * pA; t2 += pA;
+        }
+        if (!Solve(new[,] { { s11, s12 }, { s12, s22 } }, new[] { t1, t2 }, out var xr)) return null;
+        double r = xr[0], d = xr[1];
+        if (r < 1e-6 || r > diag) return null;
+
+        var (e1, e2) = Basis(axis);
+        var q = new (double X, double Y)[pts.Count];
+        for (int i = 0; i < pts.Count; i++)
+        {
+            var onCircle = pts[i] - normals[i] * r;
+            q[i] = (Vec3.Dot(onCircle, e1), Vec3.Dot(onCircle, e2));
+        }
+        if (!TryCircle(q, out double cx, out double cy, out double major)) return null;
+        if (major < 1e-6 || major > 10 * diag) return null;
+        // r >= R is a spindle/horn torus: its tube crosses the axis, so it is not the surface this
+        // primitive describes. Measured: every (R=10, r>=9) and (R=0.9, r=1) body is refused here.
+        if (r >= major) return null;
+
+        var centre = e1 * cx + e2 * cy + axis * d;
+
+        double max = 0, sum = 0;
+        foreach (var p in pts)
+        {
+            var dd = p - centre;
+            double z = Vec3.Dot(dd, axis);
+            double rho = (dd - axis * z).Length;
+            double err = Math.Abs(Math.Sqrt((rho - major) * (rho - major) + z * z) - r);
+            max = Math.Max(max, err); sum += err;
+            if (max > tol) return null;
+        }
+
+        return new TorusPrimitive
+        {
+            PointOnAxis = centre, Axis = axis, MajorRadius = major, MinorRadius = r,
+            FitMax = max, FitMean = sum / pts.Count
+        };
+    }
+
+    /// <summary>
+    /// Sphere: algebraic least squares. |p - c|^2 = R^2 expands to x^2+y^2+z^2 = 2 c.p + (R^2 - |c|^2),
+    /// which is linear in (cx, cy, cz, k), so one 4x4 solve gives the centre and R.
+    ///
+    /// This fit has NO discriminating power of its own: two concentric circles are exactly a sphere
+    /// (measured: a 2-ring cylinder -> residual 3.6e-15; a cone -> 7.1e-15), and so is a torus band.
+    /// Callers MUST apply the latitude guard (PrimitiveClassifier.FitRegion does); the residual test
+    /// below only rejects a body that is not co-radial at all.
+    /// </summary>
+    public static SpherePrimitive? FitSphere(IReadOnlyList<Vec3> pts, double tol, double diag)
+    {
+        if (pts.Count < 8) return null;
+
+        double a11 = 0, a12 = 0, a13 = 0, a14 = 0, a22 = 0, a23 = 0, a24 = 0, a33 = 0, a34 = 0, a44 = 0;
+        double b1 = 0, b2 = 0, b3 = 0, b4 = 0;
+        foreach (var p in pts)
+        {
+            double r0 = 2 * p.X, r1 = 2 * p.Y, r2 = 2 * p.Z, r3 = 1;
+            double rhs = p.X * p.X + p.Y * p.Y + p.Z * p.Z;
+            a11 += r0 * r0; a12 += r0 * r1; a13 += r0 * r2; a14 += r0 * r3;
+            a22 += r1 * r1; a23 += r1 * r2; a24 += r1 * r3;
+            a33 += r2 * r2; a34 += r2 * r3;
+            a44 += r3 * r3;
+            b1 += r0 * rhs; b2 += r1 * rhs; b3 += r2 * rhs; b4 += r3 * rhs;
+        }
+        double[,] m = { { a11, a12, a13, a14 }, { a12, a22, a23, a24 }, { a13, a23, a33, a34 }, { a14, a24, a34, a44 } };
+        if (!Solve(m, new[] { b1, b2, b3, b4 }, out var x)) return null;
+
+        var centre = new Vec3(x[0], x[1], x[2]);
+        double radiusSq = x[3] + Vec3.Dot(centre, centre);
+        if (radiusSq <= 0) return null;
+        double radius = Math.Sqrt(radiusSq);
+        if (radius < 1e-6 || radius > 10 * diag) return null;
+
+        double max = 0, sum = 0;
+        foreach (var p in pts)
+        {
+            double err = Math.Abs((p - centre).Length - radius);
+            max = Math.Max(max, err); sum += err;
+            if (max > tol) return null;
+        }
+        return new SpherePrimitive
+        {
+            Center = centre, Radius = radius, FitMax = max, FitMean = sum / pts.Count
+        };
+    }
+
+    /// <summary>
+    /// The largest-eigenvector direction of sum(n n^T), by power iteration seeded on the coordinate
+    /// axis with the most normal energy (so it cannot start orthogonal to the answer).
+    /// </summary>
+    internal static bool TryMaxDirection(IReadOnlyList<Vec3> normals, out Vec3 dir)
+    {
+        dir = Vec3.Zero;
+        if (normals.Count == 0) return false;
+
+        double ex = 0, ey = 0, ez = 0;
+        foreach (var n in normals) { ex += n.X * n.X; ey += n.Y * n.Y; ez += n.Z * n.Z; }
+        var v = ex >= ey && ex >= ez ? new Vec3(1, 0, 0) : (ey >= ez ? new Vec3(0, 1, 0) : new Vec3(0, 0, 1));
+
+        for (int it = 0; it < 200; it++)
+        {
+            var w = Vec3.Zero;
+            foreach (var n in normals) w += n * Vec3.Dot(n, v);
+            if (w.Length < 1e-18) return false;
+            w = w.Normalized();
+            bool done = (w - v).Length < 1e-12;
+            v = w;
+            if (done) break;
+        }
+        dir = v;
+        return true;
+    }
+
+    /// <summary>Kasa algebraic circle fit; false when the points are collinear or the matrix is singular.</summary>
+    internal static bool TryCircle((double X, double Y)[] pts, out double cx, out double cy, out double radius)
+    {
+        cx = cy = radius = 0;
+        if (pts.Length < 3) return false;
+
+        double suu = 0, suv = 0, svv = 0, su = 0, sv = 0, s1 = 0, suw = 0, svw = 0, sw = 0;
+        foreach (var p in pts)
+        {
+            double w = p.X * p.X + p.Y * p.Y;
+            suu += p.X * p.X; suv += p.X * p.Y; svv += p.Y * p.Y;
+            su += p.X; sv += p.Y; s1 += 1;
+            suw += p.X * w; svw += p.Y * w; sw += w;
+        }
+        double[,] m = { { suu, suv, su }, { suv, svv, sv }, { su, sv, s1 } };
+        if (!Solve(m, new[] { -suw, -svw, -sw }, out var x)) return false;
+
+        cx = -x[0] / 2; cy = -x[1] / 2;
+        double r2 = cx * cx + cy * cy - x[2];
+        if (r2 <= 0) return false;
+        radius = Math.Sqrt(r2);
+        return true;
+    }
+
     // Smallest-eigenvector direction of sum(n n^T), computed by fixing each component in turn.
     internal static bool TryNullDirection(IReadOnlyList<Vec3> normals, out Vec3 dir, out double residual)
     {
