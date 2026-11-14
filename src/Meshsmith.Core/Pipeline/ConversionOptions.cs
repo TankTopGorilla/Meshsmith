@@ -41,5 +41,19 @@ public sealed class ConversionOptions
     /// only way to exercise the path on a small part.</summary>
     public bool ForceDecimate { get; init; }
 
+    /// <summary>The user's claim that a file's numbers are already millimetres. Formats whose unit is
+    /// undecidable (FBX from Blender) only convert when this is false, and always say which way they
+    /// went. Ignored by formats that declare their unit (glTF is metres by spec) except to override
+    /// that declaration - which is why the note prints what was actually applied.</summary>
+    public bool TreatNumbersAsMillimetres { get; init; }
+
+    /// <summary>Byte-level read progress, 0..1. Separate from <see cref="Progress"/>, which is the
+    /// stage percentage: a 386 k STL and a 12-triangle one differ hugely here and not at all there.</summary>
+    public IProgress<double>? ByteProgress { get; init; }
+
+    /// <summary>The readers a conversion may use. Null means the built-in registry order; a list is the
+    /// injection seam that proves the pipeline really goes through <c>MeshReaderRegistry</c>.</summary>
+    public IReadOnlyList<Import.IMeshReader>? Readers { get; init; }
+
     public Action<string, double>? Progress { get; init; }
 }

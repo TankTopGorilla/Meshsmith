@@ -43,5 +43,21 @@ public sealed class ConversionResult
     /// decimation ran. This is the number that answers "did we erase detail".</summary>
     public double DecimateDeviation { get; init; }
 
+    /// <summary>The format the mesh actually came in as: "STL" | "glTF" | "GLB" | "FBX" (P10a).
+    /// Defaulted so a faces.json written before P10a still deserialises.</summary>
+    public string SourceFormat { get; init; } = "";
+
+    /// <summary>One line saying what the file's numbers meant and what was done about it, e.g.
+    /// "glTF · metres · ×1000" (P10a).</summary>
+    public string UnitNote { get; init; } = "";
+
+    /// <summary>The multiplier the reader applied to the file's numbers. 1 means "taken as mm", and
+    /// that is also the sensible default for a pre-P10a result (P10a).</summary>
+    public double AppliedScale { get; init; } = 1.0;
+
+    /// <summary>What the reader had to skip or assume. Kept apart from <see cref="Warnings"/> because
+    /// these are about the input file, not about what the converter did to it (P10a).</summary>
+    public List<string> ImportWarnings { get; init; } = new();
+
     public List<string> Warnings { get; init; } = new();
 }

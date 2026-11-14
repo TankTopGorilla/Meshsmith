@@ -9,8 +9,10 @@ public interface IMeshReader
     /// <summary>What the file was, as printed to the user: "STL", "glTF", "GLB", "FBX".</summary>
     string Format { get; }
 
-    /// <summary>Extension <b>and</b> signature. The head is up to 512 bytes of the file, already read
-    /// by the registry; a reader that only trusts extensions says so here.</summary>
+    /// <summary>Extension <b>and</b> signature. The head is up to 512 bytes of the file; an
+    /// <b>empty</b> head means the registry is asking on extension alone, which is how a stream input
+    /// (a named pipe has no seekable length) avoids being read twice. A reader that trusts extensions
+    /// says so by returning true for the empty head.</summary>
     bool CanRead(string path, ReadOnlySpan<byte> head);
 
     /// <summary>Read the whole file into one triangle soup in millimetres.

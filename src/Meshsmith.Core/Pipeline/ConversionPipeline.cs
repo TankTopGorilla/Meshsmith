@@ -3,6 +3,7 @@ using Meshsmith.Core.Brep;
 using Meshsmith.Core.Export;
 using Meshsmith.Core.Fit;
 using Meshsmith.Core.Geometry;
+using Meshsmith.Core.Import;
 using Meshsmith.Core.Mesh;
 using Meshsmith.Core.Report;
 using Meshsmith.Core.Validation;
@@ -42,7 +43,16 @@ public static class ConversionPipeline
         Directory.CreateDirectory(work);
 
         options.Progress?.Invoke("reading", 0.05);
-        var soup = StlReader.Read(stlPath);
+
+        // One seam for every format: the registry picks the reader from extension and signature, and
+        // the reader reports what the file's numbers meant. STL is byte-identical through this call
+        // because StlMeshReader wraps StlReader.Read unchanged - that is the P10a contract.
+        var read = MeshReaderRegistry.Read(stlPath,
+            options.Readers ?? MeshReaderRegistry.Readers,
+            new MeshReadOptions { TreatNumbersAsMillimetres = options.TreatNumbersAsMillimetres },
+            options.ByteProgress, cancellationToken);
+
+        var soup = read.Soup;
         var mesh = MeshWelder.Weld(soup, Math.Max(1e-9, 1e-6 * SoupDiagonal(soup)));
 
         var repair = RepairReport.None;
@@ -99,7 +109,10 @@ public static class ConversionPipeline
         var triangleRegion = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();   // index into regions
         var triangleFace = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();     // id in faces.json
         var topo = MeshTopology.Build(mesh);
-        var warnings = new List<string>();
+
+        // What the reader had to skip or assume leads the warnings: it is about the input, and a unit
+        // assumption changes every number downstream.
+        var warnings = new List<string>(read.Warnings);
 
         var health = MeshHealth.Measure(mesh, topo);
         if (!health.IsWatertight)
@@ -443,6 +456,10 @@ public static class ConversionPipeline
             Repair = repair,
             DecimateFromTriangles = decimationFrom,
             DecimateDeviation = decimationDeviation,
+            SourceFormat = read.Format,
+            UnitNote = read.UnitNote,
+            AppliedScale = read.AppliedScale,
+            ImportWarnings = read.Warnings,
             Warnings = warnings
         };
     }

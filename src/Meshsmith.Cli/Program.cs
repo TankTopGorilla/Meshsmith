@@ -73,6 +73,9 @@ internal static class Program
 
         if (report is not null) File.Copy(result.FacesPath, report, overwrite: true);
 
+        foreach (string warning in result.ImportWarnings)
+            Console.WriteLine($"warn: {warning}");
+
         foreach (string warning in result.Warnings)
             Console.WriteLine($"warn: {warning}");
 
@@ -85,6 +88,7 @@ internal static class Program
                           $"region_fallbacks={result.RegionFallbacks} " +
                           $"artifact={result.Artifact.Status.ToString().ToLowerInvariant()} " +
                           $"time={result.ElapsedSeconds:F2}s");
+        Console.WriteLine($"format={result.SourceFormat} units=\"{result.UnitNote}\"");
         if (result.DecimateFromTriangles > 0)
             Console.WriteLine($"decim={result.DecimateDeviation:0.000}x tol (from {result.DecimateFromTriangles} " +
                               $"triangles to {result.TriangleCount})");

@@ -78,6 +78,16 @@ public static class MeshReaderRegistry
         // Before the file is opened, not after: a cancelled read must not touch the disk at all.
         token.ThrowIfCancellationRequested();
 
+        // First pass with no signature at all: a reader that identifies on extension alone opens the
+        // file itself, so a stream (the worker can be handed a named pipe) is never read twice and an
+        // STL costs exactly the one read it always did.
+        foreach (var reader in readers)
+        {
+            if (reader.CanRead(path, ReadOnlySpan<byte>.Empty))
+                return reader.Read(path, options, byteProgress, token);
+        }
+
+        // Second pass: an unfamiliar extension, so the signature has to decide.
         byte[] head = ReadHead(path);
         foreach (var reader in readers)
         {
@@ -95,9 +105,18 @@ public static class MeshReaderRegistry
     private static byte[] ReadHead(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        int length = (int)Math.Min(HeadBytes, stream.Length);
-        var head = new byte[length];
-        if (length > 0) stream.ReadExactly(head, 0, length);
-        return head;
+
+        // No stream.Length: a named pipe (the worker reads STL from one) is not seekable and throws
+        // NotSupportedException there. Read up to HeadBytes and stop at EOF - which for a pipe is the
+        // same "block until the writer is done" the reader itself does, so the two cannot disagree.
+        var buffer = new byte[HeadBytes];
+        int length = 0;
+        while (length < buffer.Length)
+        {
+            int read = stream.Read(buffer, length, buffer.Length - length);
+            if (read <= 0) break;
+            length += read;
+        }
+        return length == buffer.Length ? buffer : buffer[..length];
     }
 }
