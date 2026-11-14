@@ -38,8 +38,13 @@ public static class PrimitiveClassifier
                 if (fit is null) { prim = null; break; }
                 prim = fit;
 
-                var kept = region.Where(t =>
-                    Math.Abs(fit.DistanceTo(mesh.Centroid(t))) <= options.Tolerance).ToArray();
+                // A torus's DistanceTo is one sagitta in from every direction at a facet CENTROID, so
+                // the fit's own residual test passes at the vertices while the centroid test needs
+                // twice the tolerance - measured: at 64x32 the exact fit keeps 0 of 4096 triangles at
+                // 1x and all of them at 2x. A cylinder has the same shape of problem (1.14x at 64
+                // segments); the existing code already tolerates that, this just names it.
+                double refitTol = fit is TorusPrimitive ? 2 * options.Tolerance : options.Tolerance;
+                var kept = region.Where(t => Math.Abs(fit.DistanceTo(mesh.Centroid(t))) <= refitTol).ToArray();
 
                 if (kept.Length == 0) { prim = null; break; }
                 if (kept.Length == region.Length) { region = kept; break; }
