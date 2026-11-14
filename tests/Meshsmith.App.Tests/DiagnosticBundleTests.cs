@@ -94,6 +94,22 @@ public class DiagnosticBundleTests : IDisposable
     }
 
     [Fact]
+    public void The_bundle_carries_the_current_and_the_previous_log()
+    {
+        var current = WriteLog(10);
+        var previous = Path.Combine(_dir, "meshsmith-app.log.1");
+        File.WriteAllLines(previous, Enumerable.Range(1, 5).Select(i => $"old line {i}"));
+
+        DiagnosticBundle.Create(ZipPath, Inputs(null), current, previousLogPath: previous);
+
+        var entries = Entries(ZipPath);
+        Assert.Contains("log-tail.txt", entries);
+        Assert.Contains("log-prev-tail.txt", entries);      // the rotated log travels with it
+        Assert.Contains("line 10", Text(ZipPath, "log-tail.txt"));
+        Assert.Contains("old line 5", Text(ZipPath, "log-prev-tail.txt"));
+    }
+
+    [Fact]
     public void A_missing_log_or_model_does_not_throw()
     {
         var missing = Path.Combine(_dir, "nope.stl");

@@ -9,40 +9,18 @@ namespace Meshsmith.App;
 
 public partial class App : Application
 {
-    private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "meshsmith-app.log");
+    /// <summary>Two files: the live log and the session before it. Rotation replaces the old
+    /// "delete at 2 MB on startup", so the previous run's evidence survives as <c>.1</c>.</summary>
+    private static readonly LogFile Logs = new(Path.GetTempPath());
 
-    /// <summary>The log the diagnostic bundle carries. One path, one file, no copies.</summary>
-    public static string LogFilePath => LogPath;
-
-    private const long LogLimitBytes = 2L * 1024 * 1024;
+    /// <summary>The log the diagnostic bundle carries.</summary>
+    public static string LogFilePath => Logs.Path;
 
     /// <summary>Append, never wipe: a second instance used to erase the first one's evidence.</summary>
-    public static void Log(string message)
-    {
-        try
-        {
-            File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {message}\n");
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // A missing log line is never worth failing a conversion over.
-        }
-    }
+    public static void Log(string message) => Logs.Append(message);
 
-    /// <summary>Start a new session in the log, capped so it cannot grow without bound.</summary>
-    private static void StartLog()
-    {
-        try
-        {
-            if (File.Exists(LogPath) && new FileInfo(LogPath).Length > LogLimitBytes) File.Delete(LogPath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // Another instance holds it; keep going with whatever is there.
-        }
-
-        Log($"=== start {DateTime.Now:yyyy-MM-dd HH:mm:ss} (pid {Environment.ProcessId}) ===");
-    }
+    /// <summary>Start a new session in the log, rotating an oversized one first.</summary>
+    private static void StartLog() => Logs.Start();
 
     protected override void OnStartup(StartupEventArgs e)
     {

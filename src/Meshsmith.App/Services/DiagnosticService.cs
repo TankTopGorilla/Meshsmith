@@ -25,7 +25,8 @@ public sealed class DiagnosticService : IDiagnosticService
         {
             string path = Path.Combine(Path.GetTempPath(),
                 $"meshsmith-diag-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
-            DiagnosticBundle.Create(path, inputs, _logPath, _maxModelBytes);
+            DiagnosticBundle.Create(path, inputs, _logPath, _maxModelBytes,
+                                    previousLogPath: _logPath + ".1");
             return path;
         }
         catch (Exception)

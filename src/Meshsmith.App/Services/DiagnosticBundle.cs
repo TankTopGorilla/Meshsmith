@@ -25,8 +25,11 @@ public static class DiagnosticBundle
     public const long DefaultMaxModelBytes = 100L * 1024 * 1024;
     private const int LogTailLines = 200;
 
+    /// <param name="previousLogPath">The rotated log (<c>.1</c>). Included as
+    /// <c>log-prev-tail.txt</c> when it exists: a failure usually begins in the session before the
+    /// one that reported it, and that is the file the old code deleted.</param>
     public static void Create(string zipPath, DiagnosticInputs inputs, string? logPath,
-                              long maxModelBytes = DefaultMaxModelBytes)
+                              long maxModelBytes = DefaultMaxModelBytes, string? previousLogPath = null)
     {
         string? directory = Path.GetDirectoryName(Path.GetFullPath(zipPath));
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -37,9 +40,12 @@ public static class DiagnosticBundle
         string? hash = modelExists ? HashOf(inputs.SourcePath) : null;
         bool logExists = logPath is not null && File.Exists(logPath);
 
+        bool previousExists = previousLogPath is not null && File.Exists(previousLogPath);
+
         using var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
         Write(archive, "diagnostic.txt", Describe(inputs, hash, maxModelBytes, logExists, copyModel));
         Write(archive, "log-tail.txt", Tail(logPath));
+        if (previousExists) Write(archive, "log-prev-tail.txt", Tail(previousLogPath));
 
         if (copyModel)
             archive.CreateEntryFromFile(inputs.SourcePath!, "model.stl", CompressionLevel.Optimal);
