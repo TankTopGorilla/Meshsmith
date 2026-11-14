@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Pipes;
 using System.Text;
 using Meshsmith.App.Services;
+using Meshsmith.App.ViewModels;
 
 namespace Meshsmith.App.Tests;
 
@@ -153,6 +154,109 @@ public class WorkerConversionTests
                 worker.Kill(entireProcessTree: true);
             }
 
+            File.Delete(dense);
+        }
+    }
+
+    [Fact]
+    public async Task Cancelling_during_the_read_returns_to_ready_without_a_work_directory()
+    {
+        var dense = DenseStl.Create(40_000);
+        var workRoot = Path.Combine(Path.GetTempPath(), $"meshsmith-work-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(workRoot);
+
+        var viewModel = new MainViewModel(new FakeFileDialogs(),
+                                          new WorkerConversionService(workRoot: workRoot),
+                                          new FakeMeshProbe());
+
+        bool cancelled = false;
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            // The first real report is the pipeline's `reading 0.05`. Cancel on it - not on a timer,
+            // and not on the stage the view model sets before the worker has said anything.
+            if (cancelled || args.PropertyName != nameof(MainViewModel.Progress)) return;
+            if (viewModel.Progress <= 0 || viewModel.StageText != "READING") return;
+            cancelled = true;
+            viewModel.Cancel();
+        };
+
+        try
+        {
+            await viewModel.LoadFileAsync(dense);
+            await viewModel.ConvertAsync();
+
+            Assert.True(cancelled, "no progress report ever reached the view model");
+            Assert.False(viewModel.IsBusy);
+            Assert.Equal("READY", viewModel.StageText);
+            Assert.False(viewModel.HasError);                   // a cancel is not a failure
+
+            // The cancelled run takes its working directory with it: nothing left to sweep.
+            Assert.Empty(Directory.GetDirectories(workRoot));
+        }
+        finally
+        {
+            try { Directory.Delete(workRoot, recursive: true); } catch { /* a held handle */ }
+            File.Delete(dense);
+        }
+    }
+
+    [Fact]
+    public async Task A_worker_cancelled_in_the_read_exits_with_code_three()
+    {
+        var dense = DenseStl.Create(40_000);        // ~2.5 MB: the read is long enough to land inside
+        var pipeName = "meshsmith-cancel-" + Guid.NewGuid().ToString("N");
+        var work = Path.Combine(Path.GetTempPath(), $"meshsmith-{Guid.NewGuid():N}");
+
+        var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "Meshsmith.Worker.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        start.ArgumentList.Add("--pipe");
+        start.ArgumentList.Add(pipeName);
+        start.ArgumentList.Add("--input");
+        start.ArgumentList.Add(dense);
+        start.ArgumentList.Add("--work");
+        start.ArgumentList.Add(work);
+
+        var pipe = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1,
+                                             PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        using var worker = Process.Start(start) ?? throw new InvalidOperationException("no worker");
+
+        try
+        {
+            await pipe.WaitForConnectionAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            using var reader = new StreamReader(pipe, new UTF8Encoding(false));
+            using var writer = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = true };
+
+            // `reading` is announced before the file is opened, so the cancel goes down the pipe
+            // while the worker is inside the read, which is the stage this test is about. Keep
+            // draining until the child closes its end: a full pipe would park the worker in a
+            // write instead of letting it finish cancelling.
+            bool sent = false;
+            while (await reader.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(60)) is { } line)
+            {
+                if (!sent && line.Contains("\"reading\"", StringComparison.Ordinal))
+                {
+                    await writer.WriteLineAsync("cancel");
+                    sent = true;
+                }
+            }
+
+            Assert.True(sent, "the worker never announced a read to cancel");
+
+            await worker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+            Assert.True(worker.HasExited);
+            Assert.Equal(3, worker.ExitCode);       // ExitCancelled, not an unhandled exception
+        }
+        finally
+        {
+            if (!worker.HasExited) worker.Kill(entireProcessTree: true);
+            pipe.Dispose();
+            try { if (Directory.Exists(work)) Directory.Delete(work, recursive: true); } catch { /* held */ }
             File.Delete(dense);
         }
     }
