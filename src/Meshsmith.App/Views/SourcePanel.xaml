@@ -206,14 +206,18 @@
           </StackPanel>
           <TextBlock Text="{Binding ErrorText}" FontSize="11" Margin="0,5,0,0"
                      Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" />
-          <StackPanel Orientation="Horizontal" Margin="0,7,0,0"
-                      Visibility="{Binding HasDiagnostic, Converter={StaticResource BoolToVis}}">
+          <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+            <Button Content="Copy diagnostics" Style="{StaticResource GhostButton}"
+                    Command="{Binding CopyDiagnosticsCommand}" Height="20" Padding="8,0"
+                    FontSize="10" ToolTip="Copy the version, the failure and the path to the evidence" />
             <Button Content="Save diagnostic bundle" Style="{StaticResource GhostButton}"
                     Command="{Binding SaveDiagnosticBundleCommand}" Height="20" Padding="8,0"
-                    FontSize="10" />
+                    FontSize="10" Margin="6,0,0,0"
+                    Visibility="{Binding HasDiagnostic, Converter={StaticResource BoolToVis}}" />
             <TextBlock Text="{Binding DiagnosticName}" FontSize="10" Margin="8,0,0,0"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                       Foreground="{StaticResource TextMuted}" ToolTip="{Binding DiagnosticPath}" />
+                       Foreground="{StaticResource TextMuted}" ToolTip="{Binding DiagnosticPath}"
+                       Visibility="{Binding HasDiagnostic, Converter={StaticResource BoolToVis}}" />
           </StackPanel>
         </StackPanel>
       </Border>

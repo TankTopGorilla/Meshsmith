@@ -13,6 +13,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly IConversionService _converter;
     private readonly IMeshProbe _probe;
     private readonly IDiagnosticService? _diagnostics;
+    private readonly IClipboard _clipboard;
     private readonly SynchronizationContext? _ui;
     private readonly SettingsStore? _settings;
     private AppSettings _preferences;
@@ -65,12 +66,14 @@ public sealed class MainViewModel : ObservableObject
 
     public MainViewModel(IFileDialogService dialogs, IConversionService converter, IMeshProbe probe,
                          SynchronizationContext? uiContext = null, IDiagnosticService? diagnostics = null,
-                         SettingsStore? settings = null, AppSettings? preferences = null)
+                         SettingsStore? settings = null, AppSettings? preferences = null,
+                         IClipboard? clipboard = null)
     {
         _dialogs = dialogs;
         _converter = converter;
         _probe = probe;
         _diagnostics = diagnostics;
+        _clipboard = clipboard ?? new WpfClipboard();
         _ui = uiContext;
         _settings = settings;
         _preferences = preferences ?? AppSettings.Default;
@@ -85,6 +88,7 @@ public sealed class MainViewModel : ObservableObject
         SaveIgesCommand = new RelayCommand(_ => Save(_result?.IgesPath), _ => CanExport);
         ClearCommand = new RelayCommand(_ => Clear(), _ => HasSource && !IsBusy);
         SaveDiagnosticBundleCommand = new RelayCommand(_ => SaveDiagnosticBundle(), _ => HasDiagnostic);
+        CopyDiagnosticsCommand = new RelayCommand(_ => CopyDiagnostics(), _ => HasDiagnostic || LogExists);
         ReRunCommand = new AsyncRelayCommand(_ => ConvertAsync(), _ => CanRerun);
         SettingsCommand = new RelayCommand(_ => SettingsRequested?.Invoke(this, EventArgs.Empty));
         OpenRecentCommand = new AsyncRelayCommand(p => OpenRecentAsync(p as string),
@@ -122,6 +126,10 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand SaveIgesCommand { get; }
     public RelayCommand ClearCommand { get; }
     public RelayCommand SaveDiagnosticBundleCommand { get; }
+
+    /// <summary>Puts the failure, the version and a path that exists on the clipboard: no dialog,
+    /// no bundling, no waiting for a save.</summary>
+    public RelayCommand CopyDiagnosticsCommand { get; }
     public AsyncRelayCommand ReRunCommand { get; }
     public RelayCommand SettingsCommand { get; }        // raises SettingsRequested
     public AsyncRelayCommand OpenRecentCommand { get; } // parameter: the full path
@@ -188,6 +196,10 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Where the bundle from the last failure was written, if one was captured.</summary>
     public string? DiagnosticPath => _diagnosticPath;
     public bool HasDiagnostic => _diagnosticPath is not null;
+
+    /// <summary>Whether there is a log to point at when no bundle was captured: the path a bug
+    /// report can be given even when the failure never reached the bundle stage.</summary>
+    public bool LogExists => File.Exists(App.LogFilePath);
     public string DiagnosticName => _diagnosticPath is null ? "" : Path.GetFileName(_diagnosticPath);
 
     /// <summary>The last action's own words ("Saved part.step", "Conversion cancelled"). It takes
@@ -484,6 +496,29 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>Copies the four lines a bug report actually needs, onto the clipboard, with no
+    /// dialog in the way. The path it names always exists: the bundle when one was captured, the
+    /// live log otherwise.</summary>
+    private void CopyDiagnostics()
+    {
+        string evidence = _diagnosticPath is { } bundle && File.Exists(bundle)
+            ? $"bundle: {bundle}"
+            : $"log: {App.LogFilePath}";
+
+        string version = typeof(MainViewModel).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+        string failure = HasError ? $"{_errorTitle}: {_error}" : "no failure recorded";
+
+        _clipboard.SetText(string.Join(Environment.NewLine, new[]
+        {
+            $"Meshsmith {version} · {DateTime.Now:yyyy-MM-dd HH:mm:ss zzz}",
+            failure,
+            $"stage: {(string.IsNullOrEmpty(_stage) ? "none" : _stage)}",
+            evidence
+        }));
+
+        SetFeedback("Diagnostics copied");
+    }
+
     private void ApplyProgress(ConversionProgress progress, int generation)
     {
         if (generation != _generation) return;   // stale reporter from a superseded conversion
@@ -628,6 +663,7 @@ public sealed class MainViewModel : ObservableObject
         SaveIgesCommand.RaiseCanExecuteChanged();
         ClearCommand.RaiseCanExecuteChanged();
         SaveDiagnosticBundleCommand.RaiseCanExecuteChanged();
+        CopyDiagnosticsCommand.RaiseCanExecuteChanged();
         ReRunCommand.RaiseCanExecuteChanged();
     }
 

@@ -24,8 +24,12 @@ internal sealed class FakeFileDialogs : IFileDialogService
         return StlPath;
     }
 
+    /// <summary>How many times a save dialog was raised: "Copy diagnostics" must never raise one.</summary>
+    public int PickSaveCalls { get; private set; }
+
     public string? PickSave(string filter, string suggestedName, string? initialDirectory = null)
     {
+        PickSaveCalls++;
         LastFilter = filter;
         LastSuggestedName = suggestedName;
         LastInitialDirectory = initialDirectory;
@@ -37,6 +41,16 @@ internal sealed class FakeFileDialogs : IFileDialogService
         LastInitialDirectory = initialDirectory;
         return FolderPath;
     }
+}
+
+internal sealed class FakeClipboard : IClipboard
+{
+    private readonly List<string> _copied = new();
+
+    public IReadOnlyList<string> Copied => _copied;
+    public string? Last => _copied.Count == 0 ? null : _copied[^1];
+
+    public void SetText(string text) => _copied.Add(text);
 }
 
 internal sealed class FakeMeshProbe : IMeshProbe
