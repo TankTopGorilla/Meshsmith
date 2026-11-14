@@ -5,7 +5,17 @@ namespace Meshsmith.Core.Seg;
 
 public static class RegionGrower
 {
-    public static List<int[]> Grow(MeshData mesh, MeshTopology topology, double dihedralDeg)
+    public static List<int[]> Grow(MeshData mesh, MeshTopology topology, double dihedralDeg) =>
+        Grow(mesh, topology, dihedralDeg, null);
+
+    /// <summary>
+    /// The same flood fill, restricted to <paramref name="allowed"/> (null means every triangle). The
+    /// classifier's second pass re-grows only the residual and the regions that touch it: a grow that
+    /// could leave that set would re-claim triangles another region already owns, and the pass's
+    /// "how many analytic triangles does this piece take over" count would stop being honest.
+    /// </summary>
+    public static List<int[]> Grow(MeshData mesh, MeshTopology topology, double dihedralDeg,
+                                   bool[]? allowed)
     {
         double cos = Math.Cos(dihedralDeg * Math.PI / 180.0);
         var region = Enumerable.Repeat(-1, mesh.TriangleCount).ToArray();
@@ -15,6 +25,7 @@ public static class RegionGrower
         for (int seed = 0; seed < mesh.TriangleCount; seed++)
         {
             if (region[seed] >= 0) continue;
+            if (allowed is not null && !allowed[seed]) continue;
             int id = regions.Count;
             var members = new List<int>();
             region[seed] = id;
@@ -29,6 +40,7 @@ public static class RegionGrower
                 {
                     int nb = topology.Neighbor[t * 3 + e];
                     if (nb < 0 || region[nb] >= 0) continue;
+                    if (allowed is not null && !allowed[nb]) continue;
                     if (Vec3.Dot(nt, mesh.Normal(nb)) < cos) continue;
                     region[nb] = id;
                     stack.Push(nb);
