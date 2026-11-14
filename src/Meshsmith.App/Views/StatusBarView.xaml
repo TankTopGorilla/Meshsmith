@@ -20,6 +20,10 @@
         <TextBlock Text="{Binding ProgressText}" FontSize="9.5" Margin="8,0,0,0"
                    Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"
                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+        <TextBlock Text="{Binding EtaText}" FontSize="9.5" Margin="8,0,0,0"
+                   Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"
+                   Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                   ToolTip="Estimated time left - fitted to how long this model's stages actually take, not to the percentage" />
         <TextBlock Text="{Binding ActivityText}" FontSize="9.5" Margin="10,0,0,0"
                    Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"
                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"

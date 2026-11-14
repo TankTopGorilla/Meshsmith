@@ -44,6 +44,11 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Turns progress messages and worker beats into a line that moves even when the
     /// percentage does not, so a long sew reads as "2:13 · 97% CPU" rather than a frozen bar.</summary>
     private readonly ActivityClock _activity = new();
+
+    /// <summary>The percentage is an effort fraction, not a time fraction; this is the honest
+    /// answer to "how long left", fitted to the stages that have actually finished.</summary>
+    private readonly EtaEstimator _eta = new();
+    private string _etaText = "";
     private Timer? _ticker;
 
     /// <summary>The run currently in flight, if any. Cancelling it is what the Cancel button and a
@@ -170,6 +175,10 @@ public sealed class MainViewModel : ObservableObject
     public double Progress => _progress;
     public double ProgressShare => _progress / 100.0;
     public string ProgressText => _progress.ToString("0", CultureInfo.InvariantCulture) + "%";
+
+    /// <summary>"~2 min" next to the percentage; empty until a stage has completed and the estimate
+    /// has something measured to stand on.</summary>
+    public string EtaText => _etaText;
     public string ErrorText => _error ?? "";
     public bool HasError => _error is not null;
 
@@ -311,6 +320,8 @@ public sealed class MainViewModel : ObservableObject
         _stageIndex = 0;
         _feedback = null;
         _diagnosticPath = null;
+        _eta.Start(DateTime.UtcNow, _sourceInfo?.TriangleCount ?? 0);
+        _etaText = "";
         MarkStages(0);
         _error = null;
         _errorTitle = ConversionFailedTitle;
@@ -336,6 +347,7 @@ public sealed class MainViewModel : ObservableObject
             foreach (var warning in result.Warnings) Warnings.Add(warning);
             _progress = 100;
             _stage = "";
+            _etaText = "";
             _stageIndex = Stages.Count;
             MarkStages(Stages.Count);
             ResultReady?.Invoke(this, result);
@@ -346,6 +358,7 @@ public sealed class MainViewModel : ObservableObject
             if (generation != _generation) return;
             _stage = "";
             _progress = 0;
+            _etaText = "";
             _stageIndex = -1;
             MarkStages(-1);
             _feedback = "Conversion cancelled";
@@ -397,6 +410,7 @@ public sealed class MainViewModel : ObservableObject
         _mix = FaceMix.Empty;
         _progress = 0;
         _stage = "";
+        _etaText = "";
         _stageIndex = -1;
         _feedback = null;
         MarkStages(-1);
@@ -485,6 +499,9 @@ public sealed class MainViewModel : ObservableObject
         _activity.Progress(DateTime.UtcNow);
         if (progress.Stage != _stage) App.Log($"stage {progress.Stage} at {DateTime.Now:HH:mm:ss}");
 
+        _eta.Report(progress.Stage, progress.Fraction, DateTime.UtcNow);
+        _etaText = _eta.Text(DateTime.UtcNow);
+
         _progress = Math.Clamp(progress.Fraction * 100, 0, 100);
         _stage = progress.Stage;
         int index = Array.IndexOf(StageKeys, progress.Stage);
@@ -496,6 +513,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Progress));
         OnPropertyChanged(nameof(ProgressShare));
         OnPropertyChanged(nameof(ProgressText));
+        OnPropertyChanged(nameof(EtaText));
         OnPropertyChanged(nameof(StageText));
         OnPropertyChanged(nameof(ActivityText));
     }
