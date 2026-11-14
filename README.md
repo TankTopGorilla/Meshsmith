@@ -13,7 +13,7 @@ from disk and checked before the app calls it a success.
 
 - **0.1.4**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
 - **6 of 6** real test parts convert to a valid solid; 0 crashes.
-- `Meshsmith.Core` 99 tests, `Meshsmith.App` 140 tests.
+- `Meshsmith.Core` 104 tests, `Meshsmith.App` 140 tests.
 - **R1.2**, measured through the CLI: IKI KATLI MONT P1 and Part 2 now export **2,024 faces** (was
   2,784) as 8 solids at 96.8 % analytic coverage, `artifact=verified`; `pin.stl` is unchanged at
   4 faces, valid.
@@ -50,6 +50,21 @@ from disk and checked before the app calls it a success.
   needs a primitive-hypothesis segmenter, not a grower. The coarse two-torus fixtures are unchanged at
   **33.3 %** (`24×12`, `48×24`) and **0 %** (`32×16`): `24×12` cannot fit at the pipeline tolerance for a
   tessellation reason, and `48×24` loses a third of each body to a bogus `cone`.
+- **R4**, measured through the CLI: `knob.stl` (**386,266 triangles**, which previously died at the 900 s
+  timeout) now **converts — `exit 0`, `valid=True`, `artifact=verified`**, 1 solid, `faces=59,849`
+  (down from 386,266), volume 9575.456 mm³. Meshes above 200,000 triangles are reduced to 60,000 by
+  geometry3Sharp 1.0.324's quadric-error `Reducer` *before* classification (the fits have to see a
+  tessellation fine enough to resolve their surfaces — see R3's sagitta finding), then re-repaired so a
+  collapse boundary cannot hand the sewer an open shell. The reduction itself is measured at **1.08 s**
+  (R4 probe) and moves the surface by **0.228× the fit tolerance** — the measured "detail erased"
+  number, printed as `decim=`. Below the threshold the branch never fires, which is why every corpus
+  part, `clamp`, `pin` and all fixtures are byte-identical (the corpus table is unchanged).
+- **R4, the honest half:** the knob is now **convertible, not analytic** — `coverage=4.5 %`, because
+  the analytic sew failed (2,010 free edges) and the exact faceted solid was exported instead, at
+  decimated density. That body-keeping/sewing seam is R1.2-adjacent, and the dome itself still needs
+  the RANSAC-class primitive-hypothesis segmenter (R5/R2-class). Also measured and **not** met: the
+  10-minute bound. `total=1159.83s`, of which `sewing=938s` — re-sewing 60,000 facets is what makes
+  the knob slow now, not recognition (`recognising=20.90s`). The decimation itself is not the cost.
 
 ## Requirements
 
