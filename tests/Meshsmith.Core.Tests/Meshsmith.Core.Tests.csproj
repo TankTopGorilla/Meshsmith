@@ -27,6 +27,7 @@
   <ItemGroup>
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../fixtures/reference_sample.step" Link="fixtures/reference_sample.step" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../fixtures/clamp_body0.stl" Link="fixtures/clamp_body0.stl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
