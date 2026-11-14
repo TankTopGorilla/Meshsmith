@@ -31,6 +31,8 @@ internal static class Program
         string input = args[1];
         string? output = null, report = null, iges = null;
         bool verifyAll = false;
+        bool decimate = false;
+        int decimateTarget = 60_000;
 
         // Every flag is scanned: the old loop stopped one short of the end, so a value-less flag in
         // the last position (e.g. `... --verify`) was silently ignored.
@@ -42,6 +44,10 @@ internal static class Program
                 case "--iges" when i + 1 < args.Length: iges = args[++i]; break;
                 case "--faces" when i + 1 < args.Length: report = args[++i]; break;
                 case "--verify": verifyAll = true; break;
+                case "--decimate": decimate = true; break;
+                case "--decimate-target" when i + 1 < args.Length:
+                    decimateTarget = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture);
+                    break;
             }
         }
 
@@ -54,7 +60,9 @@ internal static class Program
         var result = Meshsmith.Core.Pipeline.ConversionPipeline.Run(input,
             new Meshsmith.Core.Pipeline.ConversionOptions
             {
-                VerifyFaceLimit = verifyAll ? int.MaxValue : 4000
+                VerifyFaceLimit = verifyAll ? int.MaxValue : 4000,
+                ForceDecimate = decimate,
+                DecimateTarget = decimateTarget
             });
 
         output ??= Path.ChangeExtension(input, ".step");
@@ -77,6 +85,9 @@ internal static class Program
                           $"region_fallbacks={result.RegionFallbacks} " +
                           $"artifact={result.Artifact.Status.ToString().ToLowerInvariant()} " +
                           $"time={result.ElapsedSeconds:F2}s");
+        if (result.DecimateFromTriangles > 0)
+            Console.WriteLine($"decim={result.DecimateDeviation:0.000}x tol (from {result.DecimateFromTriangles} " +
+                              $"triangles to {result.TriangleCount})");
         if (result.Artifact.Status != Meshsmith.Core.Export.ArtifactStatus.Verified)
             Console.WriteLine($"artifactDetail={result.Artifact.Detail}");
         Console.WriteLine($"step={output}");

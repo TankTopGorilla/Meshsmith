@@ -25,5 +25,21 @@ public sealed class ConversionOptions
 
     /// <summary>Holes with more boundary edges than this are left open and reported.</summary>
     public int MaxHoleEdges { get; init; } = 64;
+
+    /// <summary>Dense meshes are decimated before anything is fitted to them. The classifier's fits are
+    /// per-triangle and its region growing is quadratic-ish in the count, so a part this large never
+    /// finishes at all (the 386,266-triangle knob times out at 900 s). Measured: 386,266 -> 60,000
+    /// triangles in 1.08 s through geometry3Sharp, still closed, one body; the classifier still fits
+    /// a 40 k mesh at 0.9989x tol, so 60 k is strictly safer. 0 disables the branch.</summary>
+    public int DecimateAbove { get; init; } = 200_000;
+
+    /// <summary>What a mesh above <see cref="DecimateAbove"/> is reduced to. Lower it if the measured
+    /// deviation ever exceeds 2x tol - that is the detail erasure the report prints.</summary>
+    public int DecimateTarget { get; init; } = 60_000;
+
+    /// <summary>Decimate whatever comes in, threshold or not. The CLI seam (<c>--decimate</c>) and the
+    /// only way to exercise the path on a small part.</summary>
+    public bool ForceDecimate { get; init; }
+
     public Action<string, double>? Progress { get; init; }
 }

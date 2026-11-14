@@ -35,5 +35,13 @@ public sealed class ConversionResult
 
     /// <summary>What the repair stage changed before anything was fitted.</summary>
     public RepairReport Repair { get; init; } = RepairReport.None;
+
+    /// <summary>The triangle count the mesh came in with when a decimation ran, else 0 (R4).</summary>
+    public int DecimateFromTriangles { get; init; }
+
+    /// <summary>Farthest distance the decimation moved the surface, in fit tolerances (R4). 0 when no
+    /// decimation ran. This is the number that answers "did we erase detail".</summary>
+    public double DecimateDeviation { get; init; }
+
     public List<string> Warnings { get; init; } = new();
 }

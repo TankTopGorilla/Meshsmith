@@ -55,8 +55,33 @@ public static class ConversionPipeline
 
         Mark("reading");
 
+        // Dense meshes: the classifier fits per triangle and its region growing is quadratic-ish in
+        // the count, so a 386 k part never finishes. Decimating BEFORE recognition is the only order
+        // that works - the fits have to see a tessellation fine enough to resolve their surfaces, and
+        // an R3 finding says a mesh too coarse to resolve sagitta under `tol` classifies as nothing.
+        // Below the threshold the branch never fires, so every ordinary part is byte-identical.
+        var decimationFrom = 0;
+        var decimationDeviation = 0.0;
+        if (options.DecimateTarget > 0 &&
+            (options.ForceDecimate || (options.DecimateAbove > 0 && mesh.TriangleCount > options.DecimateAbove)))
+        {
+            var original = mesh;
+            decimationFrom = original.TriangleCount;
+            mesh = Decimator.Decimate(mesh, options.DecimateTarget, new RepairOptions(options.MaxHoleEdges));
+
+            // What the reduction erased, measured against the mesh that came in - the pipeline's own
+            // deviation figure compares the export with the mesh it classified, which is the decimated
+            // one and so cannot answer this. Stride 16: the same sample the R4 probe used, and dense
+            // enough that a collapse anywhere shows up. Normalised by `tol` below, which the decimated
+            // mesh itself sets.
+            decimationDeviation = MeshDeviation(original, mesh, stride: 16);
+
+            options.Progress?.Invoke("reading", 0.15);
+        }
+
         var diag = mesh.Diagonal;
         double tol = options.ToleranceOverride ?? Math.Clamp(2e-4 * diag, 1e-3, 0.5);
+        if (decimationFrom > 0) decimationDeviation /= tol;
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -315,6 +340,11 @@ public static class ConversionPipeline
         // inside it must not still hand back a finished result.
         cancellationToken.ThrowIfCancellationRequested();
 
+        if (decimationFrom > 0 && decimationDeviation > 2)
+            warnings.Insert(0, $"the mesh was decimated {decimationFrom} -> {mesh.TriangleCount} triangles and " +
+                                $"the reduction moved the surface by {decimationDeviation:0.##}x the fit " +
+                                "tolerance - detail was erased; lower DecimateTarget if the fits suffer");
+
         var doc = new FacesDocument
         {
             Tolerance = tol,
@@ -407,8 +437,26 @@ public static class ConversionPipeline
             Kind = doc.Kind,
             Artifact = artifact,
             Repair = repair,
+            DecimateFromTriangles = decimationFrom,
+            DecimateDeviation = decimationDeviation,
             Warnings = warnings
         };
+    }
+
+    /// <summary>Farthest sampled distance from one mesh's surface to the other's, in model units.
+    /// Stride skips triangles: a collapse anywhere still shows up in the max, and 386 k triangles at
+    /// stride 16 is 24 k lookups instead of 386 k. This is the "did the decimation erase detail"
+    /// number, and it is why the reduction is reported rather than assumed harmless.</summary>
+    private static double MeshDeviation(MeshData from, MeshData to, int stride)
+    {
+        var grid = new TriangleGrid(to);
+        double worst = 0;
+        for (int t = 0; t < from.TriangleCount; t += stride)
+        {
+            foreach (var p in new[] { from.V0(t), from.V1(t), from.V2(t), from.Centroid(t) })
+                worst = Math.Max(worst, grid.DistanceToSurface(p));
+        }
+        return worst;
     }
 
     private static double SoupDiagonal(TriangleSoup soup)
