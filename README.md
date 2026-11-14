@@ -13,7 +13,7 @@ from disk and checked before the app calls it a success.
 
 - **0.1.4**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
 - **6 of 6** real test parts convert to a valid solid; 0 crashes.
-- `Meshsmith.Core` 91 tests, `Meshsmith.App` 140 tests.
+- `Meshsmith.Core` 99 tests, `Meshsmith.App` 140 tests.
 - **R1.2**, measured through the CLI: IKI KATLI MONT P1 and Part 2 now export **2,024 faces** (was
   2,784) as 8 solids at 96.8 % analytic coverage, `artifact=verified`; `pin.stl` is unchanged at
   4 faces, valid.
@@ -35,6 +35,21 @@ from disk and checked before the app calls it a success.
   meridional residual of 7.96 mm against a 0.012 mm tolerance (666×), and an unconstrained torus fit
   over 500 axis starts bottoms out at 10.75 mm. Clamp's coverage half of the R1 gate is therefore
   **not reachable** by adding primitives; it needs segmentation work, not a new surface.
+- **R2**, measured through the CLI: the leftover region now gets a **second chance** — the residual is
+  re-grown at 20°, refitted with exactly the rule the primary seeds use, and split 12/6/3 where the fit
+  still fails, behind a 16-triangle floor and a **monotone acceptance rule** (a piece is kept only if
+  its fit keeps at least as many triangles as the piece takes from analytic regions), so coverage
+  cannot fall. `ATLAS` **64.7 → 79.0 %** (935 faces, `valid=True`, `artifact=verified`, exit 0),
+  `clamp.stl` **34.3 → 55.4 %** (4,444 faces, `valid=True`, `artifact=verified`, exit 0), and the
+  in-repo witness `fixtures/clamp_body0.stl` **33.9 → 57.9 %**. Nothing else moved: `pin.stl` 4 faces /
+  100 %, `IKI KATLI MONT P1` 2,024 / 96.8 %, `IKI KATLI MONT` 7,266 / 99.2 %, the washer fixture
+  4 faces / 100 %, the 64×32 two-torus 100 %.
+- **R2, the honest half:** **the knob is not recognised by segmentation** — its classifier already
+  returns one 369,852-triangle region (96 % of the mesh), and the split ladder only turns that into
+  5,091 regions at **40.5 %** "coverage" (154,256 of the 156,522 gained triangles are planes), so it
+  needs a primitive-hypothesis segmenter, not a grower. The coarse two-torus fixtures are unchanged at
+  **33.3 %** (`24×12`, `48×24`) and **0 %** (`32×16`): `24×12` cannot fit at the pipeline tolerance for a
+  tessellation reason, and `48×24` loses a third of each body to a bogus `cone`.
 
 ## Requirements
 
