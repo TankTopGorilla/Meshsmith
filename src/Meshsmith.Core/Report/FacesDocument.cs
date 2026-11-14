@@ -51,6 +51,10 @@ public sealed class Summary
     [JsonPropertyName("planes")] public int Planes { get; set; }
     [JsonPropertyName("cylinders")] public int Cylinders { get; set; }
     [JsonPropertyName("cones")] public int Cones { get; set; }
+    // R3: the two new surface kinds. int defaults keep every older faces.json valid - the App's
+    // TempFiles.FacesJson and every recorded fixture predate them.
+    [JsonPropertyName("toruses")] public int Toruses { get; set; }
+    [JsonPropertyName("spheres")] public int Spheres { get; set; }
     [JsonPropertyName("faceted_triangles")] public int FacetedTriangles { get; set; }
     [JsonPropertyName("recon_coverage")] public double ReconCoverage { get; set; }
     [JsonPropertyName("region_fallbacks")] public int RegionFallbacks { get; set; }

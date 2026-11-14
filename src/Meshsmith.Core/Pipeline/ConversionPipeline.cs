@@ -307,6 +307,8 @@ public static class ConversionPipeline
                 Planes = faceRecords.Count(f => f.Category == "plane"),
                 Cylinders = faceRecords.Count(f => f.Category == "cylinder"),
                 Cones = faceRecords.Count(f => f.Category == "cone"),
+                Toruses = faceRecords.Count(f => f.Category == "torus"),
+                Spheres = faceRecords.Count(f => f.Category == "sphere"),
                 FacetedTriangles = facetedTriangles,
                 ReconCoverage = recon.Coverage,
                 RegionFallbacks = regionFallbacks,
@@ -336,7 +338,9 @@ public static class ConversionPipeline
                 {
                     ["PLANE"] = doc.Summary.Planes,
                     ["CYLINDER"] = doc.Summary.Cylinders,
-                    ["CONE"] = doc.Summary.Cones
+                    ["CONE"] = doc.Summary.Cones,
+                    ["TORUS"] = doc.Summary.Toruses,
+                    ["SPHERE"] = doc.Summary.Spheres
                 },
                 FacetedTriangles = facetedTriangles,
                 FitTolerance = tol,
@@ -449,6 +453,20 @@ public static class ConversionPipeline
                     ["apex"] = new[] { k.Apex.X, k.Apex.Y, k.Apex.Z },
                     ["axis"] = new[] { k.Axis.X, k.Axis.Y, k.Axis.Z },
                     ["half_angle_degrees"] = k.HalfAngle * 180 / Math.PI
+                },
+                TorusPrimitive t => new Dictionary<string, object?>
+                {
+                    ["kind"] = "torus",
+                    ["point"] = new[] { t.PointOnAxis.X, t.PointOnAxis.Y, t.PointOnAxis.Z },
+                    ["axis"] = new[] { t.Axis.X, t.Axis.Y, t.Axis.Z },
+                    ["major_radius"] = t.MajorRadius,
+                    ["minor_radius"] = t.MinorRadius
+                },
+                SpherePrimitive s => new Dictionary<string, object?>
+                {
+                    ["kind"] = "sphere",
+                    ["center"] = new[] { s.Center.X, s.Center.Y, s.Center.Z },
+                    ["radius"] = s.Radius
                 },
                 _ => new Dictionary<string, object?> { ["kind"] = prim.Kind }
             }
