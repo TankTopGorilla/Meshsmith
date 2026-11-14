@@ -12,6 +12,34 @@ public static class PrimitiveClassifier
     public sealed record Options(double Tolerance, double DihedralDeg, int RefitIterations)
     {
         public static Options Default(double tolerance) => new(tolerance, 12, 3);
+
+        /// <summary>
+        /// The second pass over the residual: re-grow it with a relaxed threshold, fit, and split what
+        /// still does not fit. On by default; the rollback lever and the monotonicity test switch it.
+        /// </summary>
+        public bool SecondChance { get; init; } = true;
+
+        /// <summary>
+        /// How far the residual may re-grow before it is re-fitted. 20 deg is the measured value: a
+        /// 48x24 torus steps 15 deg in v and a 12 deg grower fragments it, while 20 hands the body over
+        /// (measured: 32 seeds of 96 triangles at 12 deg, 2 of 1536 at 20 deg).
+        /// </summary>
+        public double SecondChanceDihedralDeg { get; init; } = 20;
+
+        /// <summary>
+        /// The split ladder for a piece that still does not fit. The first level IS the primary
+        /// threshold, so the first split reproduces today's segmentation exactly - measured: a 1-level
+        /// ladder changes no part at all, and the 12/6/3 ladder is where every gain comes from.
+        /// </summary>
+        public IReadOnlyList<double> SecondChanceLevels { get; init; } = new[] { 12.0, 6.0, 3.0 };
+
+        /// <summary>
+        /// Pieces below this are never accepted. Measured on clamp's jaw: without a floor, a 3 degree
+        /// split "covers" 78.7 % of it with 963 one-triangle planes, and the coverage metric cannot tell
+        /// that from recognition. 16 removes the 1..15-triangle crumbs and keeps the 33-triangle
+        /// curvature patches (32 costs another 6.2 points on clamp).
+        /// </summary>
+        public int MinPieceTriangles { get; init; } = 16;
     }
 
     public static List<ClassifiedRegion> Classify(MeshData mesh, Options options,
@@ -31,26 +59,7 @@ public static class PrimitiveClassifier
             var region = seed.Where(t => !assigned[t]).ToArray();
             if (region.Length == 0) continue;
 
-            Primitive? prim = null;
-            for (int it = 0; it < options.RefitIterations; it++)
-            {
-                var fit = FitRegion(mesh, region, options.Tolerance, mesh.Diagonal);
-                if (fit is null) { prim = null; break; }
-                prim = fit;
-
-                // A torus's DistanceTo is one sagitta in from every direction at a facet CENTROID, so
-                // the fit's own residual test passes at the vertices while the centroid test needs
-                // twice the tolerance - measured: at 64x32 the exact fit keeps 0 of 4096 triangles at
-                // 1x and all of them at 2x. A cylinder has the same shape of problem (1.14x at 64
-                // segments); the existing code already tolerates that, this just names it.
-                double refitTol = fit is TorusPrimitive ? 2 * options.Tolerance : options.Tolerance;
-                var kept = region.Where(t => Math.Abs(fit.DistanceTo(mesh.Centroid(t))) <= refitTol).ToArray();
-
-                if (kept.Length == 0) { prim = null; break; }
-                if (kept.Length == region.Length) { region = kept; break; }
-                region = kept;
-            }
-
+            var prim = FitWithRefit(mesh, region, options, out region);
             if (prim is null) continue;
 
             foreach (var t in region) assigned[t] = true;
@@ -63,6 +72,13 @@ public static class PrimitiveClassifier
             result.Add(new ClassifiedRegion(leftovers,
                 new FacetedPrimitive { Triangles = leftovers.Length, SourceTriangles = leftovers.Length },
                 AverageNormal(mesh, leftovers), Area(mesh, leftovers)));
+
+        // The residual gets a second chance BEFORE the merge and the connectivity split: the pass can
+        // hand back a region that spans two patches (measured on ATLAS: 19 triangles in 2 pieces), and
+        // it creates coplanar planes that MergeSameSurface has to fold together. Running it last would
+        // recreate the R1.2 defect and leave duplicate coplanar faces in the export.
+        if (options.SecondChance)
+            result = SecondChance(mesh, topo, result, options, cancellationToken);
 
         return SplitByConnectivity(mesh, topo, MergeSameSurface(mesh, result, options.Tolerance));
     }
@@ -95,6 +111,147 @@ public static class PrimitiveClassifier
         if (sphere is not null && PlausibleSphere(points, sphere, diag)) return sphere;
 
         return null;
+    }
+
+    /// <summary>
+    /// Fit a region and drop the triangles the fit does not explain, up to RefitIterations times.
+    /// Extracted from the region loop because the second-chance pass must apply exactly the same rule:
+    /// a piece refitted differently from a primary seed would move a region for a reason nobody can
+    /// see in the report.
+    /// </summary>
+    private static Primitive? FitWithRefit(MeshData mesh, int[] region, Options options, out int[] kept)
+    {
+        Primitive? prim = null;
+        for (int it = 0; it < options.RefitIterations; it++)
+        {
+            var fit = FitRegion(mesh, region, options.Tolerance, mesh.Diagonal);
+            if (fit is null) { prim = null; break; }
+            prim = fit;
+
+            // A torus's DistanceTo is one sagitta in from every direction at a facet CENTROID, so
+            // the fit's own residual test passes at the vertices while the centroid test needs
+            // twice the tolerance - measured: at 64x32 the exact fit keeps 0 of 4096 triangles at
+            // 1x and all of them at 2x. A cylinder has the same shape of problem (1.14x at 64
+            // segments); the existing code already tolerates that, this just names it.
+            double refitTol = fit is TorusPrimitive ? 2 * options.Tolerance : options.Tolerance;
+            var keep = region.Where(t => Math.Abs(fit.DistanceTo(mesh.Centroid(t))) <= refitTol).ToArray();
+
+            if (keep.Length == 0) { prim = null; break; }
+            if (keep.Length == region.Length) { region = keep; break; }
+            region = keep;
+        }
+        kept = region;
+        return prim;
+    }
+
+    /// <summary>
+    /// The residual's second chance. Every seed that failed left its triangles in one faceted region;
+    /// this pass re-grows them with a relaxed threshold, refits, and splits what still does not fit at
+    /// progressively finer thresholds. It is MONOTONE by construction: a piece is accepted only when
+    /// the fit keeps at least as many triangles as the piece would take away from analytic regions,
+    /// so coverage (RecognitionStats counts triangles in non-faceted regions) can only rise.
+    ///
+    /// Measured on the corpus (floor 16, levels 12/6/3, grower 20): ATLAS 64.746 -> 79.036 %,
+    /// clamp 34.302 -> 55.429 %, clamp_body0 33.865 -> 57.939 %, and pin / P1 / IKI / washer / the
+    /// four torus fixtures are byte-identical - their residual is empty or recovers nothing.
+    /// </summary>
+    private static List<ClassifiedRegion> SecondChance(MeshData mesh, MeshTopology topo,
+                                                       List<ClassifiedRegion> regions, Options options,
+                                                       CancellationToken cancellationToken)
+    {
+        var residual = regions.Where(r => r.Primitive is FacetedPrimitive)
+                              .SelectMany(r => r.Triangles).ToArray();
+        if (residual.Length == 0) return regions;
+
+        int n = mesh.TriangleCount;
+        var owner = Enumerable.Repeat(-1, n).ToArray();       // region index per triangle
+        for (int i = 0; i < regions.Count; i++)
+            foreach (var t in regions[i].Triangles) owner[t] = i;
+
+        var taken = new bool[n];                              // won by a second-chance region
+        var accepted = new List<ClassifiedRegion>();
+        int floor = Math.Max(1, options.MinPieceTriangles);
+
+        void Refine(int[] candidate, int level)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (candidate.Length < floor) return;
+
+            var allowed = new bool[n];
+            foreach (var t in candidate) allowed[t] = true;
+
+            double dihedral = level == 0
+                ? options.SecondChanceDihedralDeg
+                : options.SecondChanceLevels[level - 1];
+            var pieces = RegionGrower.Grow(mesh, topo, dihedral, allowed);
+
+            foreach (var piece in pieces.OrderByDescending(p => p.Length))
+            {
+                if (piece.Length < floor) continue;
+
+                var prim = FitWithRefit(mesh, piece, options, out var kept);
+                if (prim is not null)
+                {
+                    int owned = piece.Count(t => owner[t] >= 0 && !(regions[owner[t]].Primitive is FacetedPrimitive));
+                    if (kept.Length >= owned)
+                    {
+                        foreach (var t in kept) taken[t] = true;
+                        accepted.Add(new ClassifiedRegion(kept, prim with { SourceTriangles = kept.Length },
+                                                          AverageNormal(mesh, kept), Area(mesh, kept)));
+                        continue;
+                    }
+                }
+
+                if (level + 1 <= options.SecondChanceLevels.Count) Refine(piece, level + 1);
+            }
+        }
+
+        Refine(Dilate(mesh, topo, regions, owner, residual), 0);
+
+        if (accepted.Count == 0) return regions;
+
+        // Rebuild: a region keeps only what no accepted piece took over. Dropping empty regions keeps
+        // the report honest - a face with no triangles is not a face.
+        var rebuilt = new List<ClassifiedRegion>(regions.Count + accepted.Count);
+        foreach (var region in regions)
+        {
+            var rest = region.Triangles.Where(t => !taken[t]).ToArray();
+            if (rest.Length == 0) continue;
+            if (rest.Length == region.Triangles.Length) { rebuilt.Add(region); continue; }
+            rebuilt.Add(new ClassifiedRegion(rest, Reprime(region.Primitive, rest.Length),
+                                             AverageNormal(mesh, rest), Area(mesh, rest)));
+        }
+        rebuilt.AddRange(accepted);
+        return rebuilt;
+    }
+
+    /// <summary>
+    /// The residual plus every region that touches it - ONE round, by whole regions. Ring-by-ring mesh
+    /// dilation was measured to be strictly worse: a region can be hundreds of triangles deep (the
+    /// 48x24 torus's cone band is 96 triangles wide), so a 2..4-ring reach never crosses it, while a
+    /// whole-region round does. One round measured equal to two on clamp and ATLAS.
+    /// </summary>
+    private static int[] Dilate(MeshData mesh, MeshTopology topo, List<ClassifiedRegion> regions,
+                                int[] owner, int[] residual)
+    {
+        var inSet = new bool[mesh.TriangleCount];
+        foreach (var t in residual) inSet[t] = true;
+
+        foreach (var t in residual)
+        {
+            for (int e = 0; e < 3; e++)
+            {
+                int nb = topo.Neighbor[t * 3 + e];
+                if (nb < 0 || inSet[nb]) continue;
+                int reg = owner[nb];
+                if (reg < 0 || regions[reg].Primitive is FacetedPrimitive) continue;
+                foreach (var u in regions[reg].Triangles) inSet[u] = true;
+            }
+        }
+
+        var result = new List<int>(residual.Length * 2);
+        for (int t = 0; t < inSet.Length; t++) if (inSet[t]) result.Add(t);
+        return result.ToArray();
     }
 
     /// <summary>
