@@ -97,6 +97,7 @@ internal static class Program
                           $"tol={result.FitTolerance:F4} faceted={result.FacetedTriangles} " +
                           $"coverage={Percent(result.ReconCoverage)} " +
                           $"region_fallbacks={result.RegionFallbacks} " +
+                          $"skipped_ladders={result.SkippedLadders} " +
                           $"artifact={result.Artifact.Status.ToString().ToLowerInvariant()} " +
                           $"time={result.ElapsedSeconds:F2}s");
         Console.WriteLine($"format={result.SourceFormat}");
