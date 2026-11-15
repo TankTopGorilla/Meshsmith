@@ -23,8 +23,12 @@ def run(cli: pathlib.Path, stl: pathlib.Path, out_dir: pathlib.Path, timeout: in
     started = time.time()
     row = {"file": stl.name, "mb": stl.stat().st_size / 1048576}
     try:
+        # The CLI writes Windows console text: a Turkish character in a model name comes back as
+        # cp1254 (0xfa = 'u' with a circumflex), not UTF-8. Decode leniently or one model kills the
+        # whole corpus run with a UnicodeDecodeError instead of producing its row.
         proc = subprocess.run([str(cli), "convert", str(stl), "-o", str(target)],
-                              capture_output=True, text=True, timeout=timeout)
+                              capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=timeout)
         row["secs"] = time.time() - started
         row["rc"] = proc.returncode
         lines = [l for l in proc.stdout.splitlines() if l.startswith("faces=")]
