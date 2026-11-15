@@ -6,17 +6,8 @@ public sealed record SolidResult(TopoDS_Shape Shape, int Shells, int FreeEdges, 
 
 public static class SolidBuilder
 {
-    /// <summary>
-    /// How many times a sew has been started in this process. A diagnostic counter, tests only: the
-    /// R5 routing tests use it to prove that a body made purely of mesh triangles never reaches
-    /// <c>BRepBuilderAPI_Sewing</c> at all. Public because this assembly has no
-    /// <c>InternalsVisibleTo</c>; nothing in the product reads it.
-    /// </summary>
-    public static int SewCallCount;
-
     public static SolidResult Sew(IEnumerable<TopoDS_Face> faces, double tolerance, bool unify = true)
     {
-        SewCallCount++;
         var list = faces.ToList();
         if (list.Count == 0) throw new InvalidOperationException("no faces to sew");
 
