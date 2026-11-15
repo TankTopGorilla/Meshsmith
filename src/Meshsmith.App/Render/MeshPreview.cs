@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
+using Meshsmith.Core.Import;
 using Meshsmith.Core.Mesh;
 using HelixToolkit.Wpf;
 using Occt;
@@ -17,9 +18,14 @@ public static class MeshPreview
     private static readonly Color Cone = Color.FromRgb(0x7F, 0xC0, 0x8D);
     private static readonly Color Faceted = Color.FromRgb(0xE2, 0x70, 0x5E);
 
+    /// <summary>The source mesh as a preview. Reads <b>any</b> format the registry opens - STL, glTF,
+    /// GLB or FBX - because the reader the registry picks already returns millimetres. The name is
+    /// historical; renaming it would touch the viewport's delegate for no gain.</summary>
     public static Model3DGroup FromStl(string path)
     {
-        var mesh = MeshWelder.Weld(StlReader.Read(path), 1e-5);
+        var read = MeshReaderRegistry.Read(path, new MeshReadOptions(),
+                                           byteProgress: null, CancellationToken.None);
+        var mesh = MeshWelder.Weld(read.Soup, 1e-5);
         var geometry = new MeshGeometry3D();
         foreach (var vertex in mesh.Vertices) geometry.Positions.Add(new Point3D(vertex.X, vertex.Y, vertex.Z));
         for (int i = 0; i < mesh.Indices.Length; i++) geometry.TriangleIndices.Add(mesh.Indices[i]);
