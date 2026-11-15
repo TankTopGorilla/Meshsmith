@@ -13,7 +13,7 @@ from disk and checked before the app calls it a success.
 
 - **0.1.4**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
 - **6 of 6** real test parts convert to a valid solid; 0 crashes.
-- `Meshsmith.Core` 104 tests, `Meshsmith.App` 140 tests.
+- `Meshsmith.Core` 130 tests, `Meshsmith.App` 155 tests.
 - **R1.2**, measured through the CLI: IKI KATLI MONT P1 and Part 2 now export **2,024 faces** (was
   2,784) as 8 solids at 96.8 % analytic coverage, `artifact=verified`; `pin.stl` is unchanged at
   4 faces, valid.
@@ -65,6 +65,21 @@ from disk and checked before the app calls it a success.
   the RANSAC-class primitive-hypothesis segmenter (R5/R2-class). Also measured and **not** met: the
   10-minute bound. `total=1159.83s`, of which `sewing=938s` — re-sewing 60,000 facets is what makes
   the knob slow now, not recognition (`recognising=20.90s`). The decimation itself is not the cost.
+- **P10a**, measured through the CLI: `.glb`, `.gltf` and `.fbx` now open through one `IMeshReader`
+  registry that carries cancellation and byte progress from birth. glTF is metres by spec, so a
+  `0.01`-unit cube arrives as **10 mm / 1,000 mm³ exactly**, printed as `units="glTF · metres · ×1000"`;
+  TRIANGLES/STRIP/FAN, non-indexed primitives, nested transforms and instances all expand correctly;
+  Draco/meshopt glTF and points/lines fail with a **named** message instead of a stack trace. A
+  Blender FBX reads its 12 triangles and **warns every time** that `UnitScaleFactor=1.0` is not a
+  usable unit — the ambiguity is surfaced, never guessed. STL is untouched: all four fixtures keep
+  byte-identical STEP output (masked-timestamp SHA-256 equal before and after the refactor).
+- **P6**, measured: the ETA is keyed on **measured stage durations**, not the bar fraction — on Part 1
+  the fraction implies 27.7 s left at `sewing` when 82.5 s remain (3.0×), and 133× on the knob, so the
+  estimator re-fits on observed stages, smooths over the last three and allows exactly one labelled
+  re-baseline for the faceted fallback. Cancel now works **during the read** (token checked every
+  4,096 triangles ≈ 0.16 ms of parse), the log rotates to `meshsmith-app.1.log` instead of being
+  deleted, `Copy diagnostics` puts a real path on the clipboard with no dialog, and a test reads the
+  shipped assemblies' metadata and fails the build if any of them ever references `System.Net`.
 
 ## Requirements
 
