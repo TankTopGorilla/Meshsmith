@@ -92,7 +92,7 @@ public static class SolidBuilder
     /// they are closed and valid - that is the precondition for getting here - so the fallback can
     /// only be more correct than a broken merge.
     /// </summary>
-    internal static TopoDS_Shape MergeOrKeepExact(TopoDS_Shape merged, TopoDS_Shape exact)
+    private static TopoDS_Shape MergeOrKeepExact(TopoDS_Shape merged, TopoDS_Shape exact)
     {
         if (new BRepCheck_Analyzer(merged).IsValid()) return merged;
 
