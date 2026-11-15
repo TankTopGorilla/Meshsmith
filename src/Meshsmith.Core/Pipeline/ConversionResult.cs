@@ -26,10 +26,6 @@ public sealed class ConversionResult
     /// <summary>Regions that fell back to facets for a reason of their own.</summary>
     public int RegionFallbacks { get; init; }
 
-    /// <summary>Per-body sew ladders not run because the analytic set provably could not close
-    /// (E1-T5). Defaulted, so a result read back from an older file still deserialises.</summary>
-    public int SkippedLadders { get; init; }
-
     /// <summary>What the written STEP contains, read back from disk.</summary>
     public required ArtifactCheck Artifact { get; init; }
 

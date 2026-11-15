@@ -130,10 +130,6 @@ public static class ConversionPipeline
                                       // would not sew). A region the classifier never made analytic did
                                       // not fall back, and neither did the all-or-nothing path - the
                                       // `faceted` count already shows that one.
-        int skippedLadders = 0;       // per-body sew ladders not run because the analytic set provably
-                                      // cannot close (AnalyticSeam). No output depends on it - a skipped
-                                      // ladder and a failed one set the same bits - so it is the only
-                                      // observable that the skip happened (E1-T5).
         bool closedFaces = false;     // a region used ClosedFaceBuilder: its patches must NOT be merged
                                       // back into one doubly-periodic face (measured: the merged face
                                       // writes an empty STEP)
@@ -250,26 +246,13 @@ public static class ConversionPipeline
             var keepAnalytic = new bool[regions.Count];
             bool anyKept = false, anyDropped = false;
 
-            // The filter `:251-253` applies to the list being sewn: a region is analytic for this
-            // purpose exactly when it contributed faces.
-            var analytic = new bool[regions.Count];
-            for (int r = 0; r < regions.Count; r++) analytic[r] = regionFaces[r] is not null;
-
             foreach (var component in components)
             {
                 var componentFaces = new List<TopoDS_Face>();
                 foreach (int r in component)
                     if (regionFaces[r] is { } builtFaces) componentFaces.AddRange(builtFaces);
 
-                // No analytic-analytic edge means no face here has a partner for one boundary edge,
-                // so every rung leaves every edge free; a failing ladder is super-linear in tolerance
-                // (R5: 281.6 s for four rungs) and this one is unwinnable. `true` = "not proven
-                // impossible", so only a proven-hopeless set is skipped and no output moves.
-                bool canClose = AnalyticSeam.CanClose(topo, triangleRegion, analytic, component);
-                if (!canClose && componentFaces.Count > 0) skippedLadders++;
-
-                bool ok = componentFaces.Count > 0 && canClose &&
-                          SolidBuilder.SewRobust(componentFaces, sewTol, unify: !closedFaces).IsValid;
+                bool ok = componentFaces.Count > 0 && SolidBuilder.SewRobust(componentFaces, sewTol, unify: !closedFaces).IsValid;
                 foreach (int r in component) keepAnalytic[r] = ok;
                 if (ok) anyKept = true; else anyDropped = true;
             }
@@ -394,7 +377,6 @@ public static class ConversionPipeline
                 FacetedTriangles = facetedTriangles,
                 ReconCoverage = recon.Coverage,
                 RegionFallbacks = regionFallbacks,
-                SkippedLadders = skippedLadders,
                 Edges = CountEdges(sewed.Shape),
                 DecimateFromTriangles = decimationFrom,
                 DecimateDeviation = decimationDeviation
@@ -434,7 +416,6 @@ public static class ConversionPipeline
                 DecimateDeviation = decimationDeviation,
                 ReconCoverage = recon.Coverage,
                 RegionFallbacks = regionFallbacks,
-                SkippedLadders = skippedLadders,
                 Warnings = warnings.Concat(read.Warnings).ToList(),
                 ArtifactStatus = artifact.Status.ToString(),
                 ArtifactDetail = artifact.Detail,
@@ -469,7 +450,6 @@ public static class ConversionPipeline
             FacetedTriangles = facetedTriangles,
             ReconCoverage = recon.Coverage,
             RegionFallbacks = regionFallbacks,
-            SkippedLadders = skippedLadders,
             Edges = doc.Summary.Edges,
             TriangleCount = mesh.TriangleCount,
             Kind = doc.Kind,

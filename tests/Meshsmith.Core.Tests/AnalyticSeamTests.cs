@@ -1,8 +1,6 @@
-using System.Text.Json;
 using Meshsmith.Core.Geometry;
 using Meshsmith.Core.Mesh;
 using Meshsmith.Core.Pipeline;
-using Meshsmith.Core.Report;
 using Xunit;
 
 namespace Meshsmith.Core.Tests;
@@ -91,33 +89,6 @@ public class AnalyticSeamTests
 
         Assert.True(AnalyticSeam.CanClose(topo2, region, analytic, new[] { 0 }));
         Assert.False(AnalyticSeam.CanClose(topo2, region, analytic, new[] { 1 }));
-    }
-
-    [Fact]
-    public void The_skip_count_is_reported_and_defaults_to_zero()
-    {
-        // A part that closes today must take no skip: the counter is the observable that catches a
-        // predicate which "proves" too much.
-        var r = ConversionPipeline.Run(StlFixtures.WriteCylinder(20, 30, 256),
-            new ConversionOptions { KeepTemporaryFiles = true });
-        Assert.True(r.IsValidSolid, string.Join("; ", r.Warnings));
-        Assert.Equal(0, r.SkippedLadders);
-
-        // The count reaches faces.json under its documented key.
-        var json = JsonSerializer.Serialize(new FacesDocument
-        {
-            Summary = new Summary { SkippedLadders = 2 }
-        });
-        Assert.Contains("\"skipped_ladders\":2", json.Replace(" ", ""));
-
-        // R3/R4's rule: a faces.json written before the field existed still deserialises, at 0.
-        const string old = """
-        {"schema":1,"summary":{"faces":5,"triangles":2048}}
-        """;
-        var doc = JsonSerializer.Deserialize<FacesDocument>(old);
-        Assert.NotNull(doc);
-        Assert.Equal(5, doc!.Summary.Faces);
-        Assert.Equal(0, doc.Summary.SkippedLadders);
     }
 
     private static (MeshData Mesh, MeshTopology Topology) Grid()

@@ -58,9 +58,6 @@ public sealed class Summary
     [JsonPropertyName("faceted_triangles")] public int FacetedTriangles { get; set; }
     [JsonPropertyName("recon_coverage")] public double ReconCoverage { get; set; }
     [JsonPropertyName("region_fallbacks")] public int RegionFallbacks { get; set; }
-    // E1-T5: per-body sew ladders skipped because the analytic set could not close. int default
-    // keeps every older faces.json valid, the R3/R4 rule.
-    [JsonPropertyName("skipped_ladders")] public int SkippedLadders { get; set; }
     [JsonPropertyName("edges")] public int Edges { get; set; }
 
     // R4: present only when a decimation ran, 0 otherwise - the R3 rule, so every faces.json written
