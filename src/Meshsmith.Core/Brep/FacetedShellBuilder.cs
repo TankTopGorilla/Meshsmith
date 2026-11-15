@@ -20,6 +20,20 @@ namespace Meshsmith.Core.Brep;
 public static class FacetedShellBuilder
 {
     /// <summary>
+    /// How many shells have been built in this process. A diagnostic counter, tests only: the R5
+    /// routing tests use it to observe what the pipeline actually did. Public because this assembly
+    /// has no <c>InternalsVisibleTo</c>; nothing in the product reads it.
+    /// </summary>
+    public static int BuildCallCount;
+
+    /// <summary>
+    /// The value of <see cref="SolidBuilder.SewCallCount"/> the last time a shell was built, so a
+    /// test can prove the shell was the FINAL body: when it is written, no sewer has touched the
+    /// part since. Also tests only.
+    /// </summary>
+    public static int SewCallsWhenBuilt;
+
+    /// <summary>
     /// Builds one solid from a closed set of mesh triangles, sharing vertices and edges.
     /// </summary>
     /// <param name="tolerance">
@@ -35,6 +49,8 @@ public static class FacetedShellBuilder
     {
         _ = tolerance;
         if (triangles.Length == 0) throw new InvalidOperationException("no triangles to build a shell from");
+        BuildCallCount++;
+        SewCallsWhenBuilt = SolidBuilder.SewCallCount;
 
         // Lazy, so a vertex no triangle of this set references never enters the shell.
         var vertexOf = new TopoDS_Vertex[mesh.Vertices.Length];

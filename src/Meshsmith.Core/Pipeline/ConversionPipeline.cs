@@ -233,7 +233,47 @@ public static class ConversionPipeline
         Mark("building");
         options.Progress?.Invoke("sewing", 0.75);
         var sewTol = Math.Max(2 * tol, 1e-3);
-        var sewed = SolidBuilder.SewRobust(faces, sewTol, unify: !closedFaces);
+
+        // A body that is NOTHING but mesh triangles is already a shell: build it from the mesh's own
+        // adjacency instead of asking a sewer to rediscover it. Measured on the knob's 60,000
+        // whole-part facets: 12.2 s + 2.9 s to unify where the sewer spent 322.4 s of one clean rung
+        // and one failing four-rung ladder, and the output is identical (59,849 faces, volume
+        // 9575.456, valid). Any analytic face still in the list means the body is mixed, and the
+        // sewer keeps it - that per-body degradation path must not change behaviour.
+        //
+        // DERIVED, never a sticky flag: `regionFaces[r] is null` IS the pipeline's marker for a
+        // faceted region (set in AddFaceted). A bool latched during the build would still say
+        // "mixed" after the whole-part fallback nulls every region, and would disable the shell on
+        // exactly the part it exists for.
+        bool AllFaceted()
+        {
+            for (int r = 0; r < regions.Count; r++)
+                if (regionFaces[r] is not null) return false;
+            return true;
+        }
+
+        int[] FacetedTriangles()
+        {
+            var set = new List<int>(mesh.TriangleCount);
+            for (int r = 0; r < regions.Count; r++)
+                if (regionFaces[r] is null) set.AddRange(regions[r].Triangles);
+            return set.ToArray();          // built ONCE per site, not per triangle
+        }
+
+        // The shell path only closes a set whose every edge is used twice. An open faceted set (the
+        // knob's 57,283-of-60,000 facets, 2,370 free edges) would become a valid-but-open shell with
+        // a boundary loop in the export, so it keeps the robust sewer; so does a mixed body.
+        SolidResult SewOrShell(bool unify)
+        {
+            if (!AllFaceted()) return SolidBuilder.SewRobust(faces, sewTol, unify);
+
+            var tris = FacetedTriangles();
+            return FacetedShellBuilder.IsClosedSet(mesh, tris)
+                ? FacetedShellBuilder.Build(mesh, tris, sewTol, unify)
+                : SolidBuilder.SewRobust(faces, sewTol, unify);
+        }
+
+        var sewed = SewOrShell(!closedFaces);
 
         if (!sewed.IsValid)
         {
@@ -284,7 +324,7 @@ public static class ConversionPipeline
                 }
 
                 options.Progress?.Invoke("sewing", 0.85);
-                sewed = SolidBuilder.SewRobust(faces, sewTol, unify: !closedFaces);
+                sewed = SewOrShell(!closedFaces);
                 perBodyRebuilt = true;
             }
 
@@ -311,7 +351,7 @@ public static class ConversionPipeline
                 for (int i = 0; i < regions.Count; i++) AddFaceted(i, counted: false);
 
                 options.Progress?.Invoke("sewing", 0.85);
-                sewed = SolidBuilder.SewRobust(faces, sewTol, unify: !closedFaces);
+                sewed = SewOrShell(!closedFaces);
             }
         }
 
