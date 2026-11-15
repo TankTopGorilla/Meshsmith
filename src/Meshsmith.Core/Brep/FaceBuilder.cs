@@ -9,21 +9,7 @@ public static class FaceBuilder
     public static List<TopoDS_Face> Build(Geom_Surface surface, Primitive prim,
                                     IReadOnlyList<(double U, double V)[]> uvLoops,
                                     double uvTol, Vec3 samplePoint, Vec3 sampleNormal)
-        => Build(surface, prim, uvLoops, uvTol, samplePoint, sampleNormal, seams: null, seamFallbacks: out _);
-
-    /// <summary>
-    /// Builds the region's face(s). <paramref name="seams"/> is index-aligned with
-    /// <paramref name="uvLoops"/>; a non-null entry says that loop's boundary touches a FACETED region,
-    /// and that loop is then built as the mesh polyline instead of a fitted curve (E1-T2).
-    /// <paramref name="seamFallbacks"/> counts the seam faces OCCT rejected, which kept the fitted wire
-    /// instead - a per-face degradation, never a per-part one.
-    /// </summary>
-    public static List<TopoDS_Face> Build(Geom_Surface surface, Primitive prim,
-                                    IReadOnlyList<(double U, double V)[]> uvLoops,
-                                    double uvTol, Vec3 samplePoint, Vec3 sampleNormal,
-                                    IReadOnlyList<SeamLoop?>? seams, out int seamFallbacks)
     {
-        seamFallbacks = 0;
         if (uvLoops.Count == 0) throw new InvalidOperationException("face has no boundary");
 
         // A face that wraps a full revolution (cylinder/cone band) is split into half-period
@@ -31,45 +17,8 @@ public static class FaceBuilder
         if (surface.IsUPeriodic && uvLoops.Any(l => SpansFullPeriod(l, surface)))
             return BuildPeriodicBand(prim, uvLoops, samplePoint, sampleNormal);
 
-        bool seamUsed = seams is not null && seams.Any(s => s is not null && s.Seam.Any(b => b));
-        if (!seamUsed)
-            return new List<TopoDS_Face>
-            {
-                AssembleFace(surface, prim, uvLoops, uvTol, samplePoint, sampleNormal, seams: null)
-            };
-
-        TopoDS_Face? face = null;
-        try
-        {
-            face = AssembleFace(surface, prim, uvLoops, uvTol, samplePoint, sampleNormal, seams);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // A mesh polyline OCCT refuses (an edge below Precision::Confusion, a degenerate loop
-            // point): the fitted wire below is still available, so the face degrades, not the region.
-            seamFallbacks = 1;
-        }
-
-        // A straight chord between two mesh vertices carries no pcurve for the analytic surface, so
-        // the face is only acceptable while OCCT still calls THAT FACE valid - checked on the face
-        // alone. When it does not, the face keeps its fitted-curve wire.
-        if (face is null || !new BRepCheck_Analyzer(face).IsValid())
-        {
-            if (face is not null) seamFallbacks = 1;
-            face = AssembleFace(surface, prim, uvLoops, uvTol, samplePoint, sampleNormal, seams: null);
-        }
-
-        return new List<TopoDS_Face> { face };
-    }
-
-    private static TopoDS_Face AssembleFace(Geom_Surface surface, Primitive prim,
-                                            IReadOnlyList<(double U, double V)[]> uvLoops, double uvTol,
-                                            Vec3 samplePoint, Vec3 sampleNormal,
-                                            IReadOnlyList<SeamLoop?>? seams)
-    {
-        var wires = new List<TopoDS_Wire>(uvLoops.Count);
-        for (int i = 0; i < uvLoops.Count; i++)
-            wires.Add(BuildWire(surface, uvLoops[i], uvTol, seams is null ? null : seams[i]));
+        var wires = new List<TopoDS_Wire>();
+        foreach (var loop in uvLoops) wires.Add(BuildWire(surface, loop, uvTol));
 
         // Outer wire = largest |signed area| in parameter space; ensure CCW, holes CW.
         var order = Enumerable.Range(0, uvLoops.Count)
@@ -104,7 +53,7 @@ public static class FaceBuilder
         // Orient against the MESH, not the region average: the average normal of a closed
         // cylinder band is ~zero, so it cannot decide the orientation.
         if (Vec3.Dot(SurfaceNormal(surface, prim, samplePoint), sampleNormal) < 0) face.Reverse();
-        return face;
+        return new List<TopoDS_Face> { face };
     }
 
     /// <summary>Normal of the fitted surface at the projection of a known mesh point.</summary>
@@ -157,50 +106,7 @@ public static class FaceBuilder
         return result;
     }
 
-    private static TopoDS_Wire BuildWire(Geom_Surface surface, (double U, double V)[] loop, double uvTol,
-                                         SeamLoop? seam)
-    {
-        if (seam is null || !seam.Seam.Any(b => b)) return BuildFittedWire(surface, loop, uvTol);
-        return BuildMeshWire(loop, seam);
-    }
-
-    /// <summary>
-    /// The seam-bearing loop as the MESH polyline: one straight edge per mesh edge, between the mesh's
-    /// own vertices - exactly the boundary the faceted side of the seam already carries, so the sewer
-    /// joins two identical segments instead of two separately fitted curves.
-    ///
-    /// The WHOLE loop is built this way, and that is a measured constraint rather than a shortcut:
-    /// BRepBuilderAPI_MakeWire rejects a junction whose vertices are 1e-6 apart
-    /// (BRepBuilderAPI_DisconnectedWire, measured), OCCT projects a vertex onto a pcurve at 1e-7, and
-    /// ATLAS's mesh vertices sit up to 1.6e-3 off their fitted surface - so a wire cannot mix surface
-    /// vertices with mesh vertices. A loop that needs the mesh needs all of it; the per-face check in
-    /// Build() keeps the fitted wire whenever OCCT rejects the result.
-    /// </summary>
-    private static TopoDS_Wire BuildMeshWire((double U, double V)[] loop, SeamLoop seam)
-    {
-        int count = loop.Length - 1;                       // UvProjector appends the closing point
-        if (count < 1 || seam.Vertices.Length < count)
-            throw new InvalidOperationException("seam mask does not match the loop");
-
-        var vertices = new TopoDS_Vertex[count];
-        for (int i = 0; i < count; i++)
-            vertices[i] = new BRepBuilderAPI_MakeVertex(seam.Mesh.Vertices[seam.Vertices[i]].ToPnt()).Vertex;
-
-        var maker = new BRepBuilderAPI_MakeWire();
-        for (int i = 0; i < count; i++)
-        {
-            var edgeMaker = new BRepBuilderAPI_MakeEdge(vertices[i], vertices[(i + 1) % count]);
-            if (!edgeMaker.IsDone) throw new InvalidOperationException(
-                $"seam edge build failed: {edgeMaker.Error} (edge {i}/{count} " +
-                $"{seam.Vertices[i]}->{seam.Vertices[(i + 1) % count]})");
-            maker.Add(edgeMaker.Edge);
-        }
-
-        if (!maker.IsDone) throw new InvalidOperationException($"seam wire build failed: {maker.Error}");
-        return maker.Wire;
-    }
-
-    private static TopoDS_Wire BuildFittedWire(Geom_Surface surface, (double U, double V)[] loop, double uvTol)
+    private static TopoDS_Wire BuildWire(Geom_Surface surface, (double U, double V)[] loop, double uvTol)
     {
         var segments = CurveFitter2d.FitLoop(loop, uvTol, cornerDeg: 20);
         if (segments.Count == 0) throw new InvalidOperationException("empty boundary");
