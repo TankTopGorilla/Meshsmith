@@ -11,9 +11,14 @@ from disk and checked before the app calls it a success.
 
 ## Status
 
-- **0.1.4**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
+- **0.1.5**, Windows desktop app (WPF, .NET 8) with a headless CLI and an isolated conversion worker.
+- **Opens `.stl`, `.glb`, `.gltf` and `.fbx`** from the file dialog — glTF is metres by spec, so a
+  `0.01`-unit cube arrives as **10 mm / 1,000 mm³ exactly** (the unit actually applied is printed in the
+  report). FBX declares no usable unit (`UnitScaleFactor=1.0` whatever Blender's unit setting), so the
+  app **warns on every FBX read** rather than guessing. Draco/meshopt-compressed glTF and points/lines
+  fail with a named message instead of a stack trace.
 - **6 of 6** real test parts convert to a valid solid; 0 crashes.
-- `Meshsmith.Core` 130 tests, `Meshsmith.App` 155 tests.
+- `Meshsmith.Core` 130 tests, `Meshsmith.App` 159 tests.
 - **R1.2**, measured through the CLI: IKI KATLI MONT P1 and Part 2 now export **2,024 faces** (was
   2,784) as 8 solids at 96.8 % analytic coverage, `artifact=verified`; `pin.stl` is unchanged at
   4 faces, valid.
