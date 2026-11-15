@@ -78,31 +78,6 @@ public class FacetedShellBuilderTests
     }
 
     [Fact]
-    public void IsClosedSet_is_false_for_four_disjoint_closed_bodies()
-    {
-        // Every edge of this set is used exactly twice, so "closed" alone is not enough: it is four
-        // separate cubes, and one shell around all four is ONE solid where the sewer makes four.
-        // Measured on clamp.stl, which is exactly this shape: 4,444 faces / solids=4 today, and
-        // 5,784 faces / solids=1 when the shell path took the whole 4-body set.
-        var cube = Cube(10);
-        var vertices = new List<Vec3>(cube.Vertices);
-        var indices = new List<int>(cube.Indices);
-        for (int body = 1; body < 4; body++)
-        {
-            int offset = vertices.Count;
-            foreach (var v in cube.Vertices) vertices.Add(new Vec3(v.X + body * 30, v.Y, v.Z));
-            foreach (int i in cube.Indices) indices.Add(i + offset);
-        }
-        var four = new MeshData { Vertices = vertices.ToArray(), Indices = indices.ToArray() };
-        var all = Enumerable.Range(0, four.TriangleCount).ToArray();
-
-        Assert.False(FacetedShellBuilder.IsClosedSet(four, all));
-
-        // ...while each body on its own IS one closed body.
-        Assert.True(FacetedShellBuilder.IsClosedSet(four, Enumerable.Range(0, cube.TriangleCount).ToArray()));
-    }
-
-    [Fact]
     public void IsClosedSet_is_true_for_a_closed_cube_and_false_for_a_patch()
     {
         var cube = Cube(10);

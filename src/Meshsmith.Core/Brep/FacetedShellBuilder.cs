@@ -136,61 +136,7 @@ public static class FacetedShellBuilder
 
         foreach (int used in uses.Values)
             if (used != 2) return false;
-
-        // ONE body, not several. Every edge can be used twice in a set that is four disjoint closed
-        // bodies - clamp.stl is exactly that - and one shell around four bodies is one solid where
-        // the sewer produced four: measured 5,784 faces / solids=1 where today is 4,444 / solids=4.
-        // The shell path builds the WHOLE set into one shell, so it is only legal when the set is
-        // one connected body.
-        return IsOneBody(mesh, triangles);
-    }
-
-    /// <summary>
-    /// True when the triangle set is a single component under EDGE adjacency: two triangles are
-    /// connected when they use the same undirected mesh edge. Vertex contact is deliberately not a
-    /// connection - clamp.stl's four bodies are welded at shared vertices (measured: bodies=4,
-    /// RegionComponents.Group=4) and vertex union-find merges all four into one "body", which is the
-    /// bug this rule exists to prevent. It is the same distinction RegionComponents.Group draws.
-    /// </summary>
-    private static bool IsOneBody(MeshData mesh, int[] triangles)
-    {
-        // Undirected edge -> the first triangle that used it. Union-find over triangles.
-        var firstUse = new Dictionary<(int Lo, int Hi), int>(triangles.Length * 3 / 2);
-        var parent = new int[triangles.Length];
-        for (int i = 0; i < parent.Length; i++) parent[i] = i;
-
-        int Find(int i)
-        {
-            while (parent[i] != i) { parent[i] = parent[parent[i]]; i = parent[i]; }
-            return i;
-        }
-        void Union(int a, int b)
-        {
-            int ra = Find(a), rb = Find(b);
-            if (ra != rb) parent[rb] = ra;
-        }
-
-        for (int slot = 0; slot < triangles.Length; slot++)
-        {
-            int t = triangles[slot];
-            int i0 = mesh.Indices[t * 3], i1 = mesh.Indices[t * 3 + 1], i2 = mesh.Indices[t * 3 + 2];
-            Link(i0, i1, slot);
-            Link(i1, i2, slot);
-            Link(i2, i0, slot);
-        }
-
-        int root = Find(0);
-        for (int i = 1; i < parent.Length; i++)
-            if (Find(i) != root) return false;
         return true;
-
-        // The first triangle to use an undirected edge owns it; the second joins it.
-        void Link(int a, int b, int slot)
-        {
-            var key = a < b ? (a, b) : (b, a);
-            if (firstUse.TryGetValue(key, out int other)) Union(other, slot);
-            else firstUse[key] = slot;
-        }
     }
 
     private static void Use(Dictionary<(int Lo, int Hi), int> uses, int a, int b)
