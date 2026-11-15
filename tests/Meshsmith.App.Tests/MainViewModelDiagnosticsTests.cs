@@ -107,7 +107,7 @@ public class MainViewModelDiagnosticsTests
             viewModel.CopyDiagnosticsCommand.Execute(null);
 
             var text = Assert.IsType<string>(clipboard.Last);
-            Assert.Contains("Meshsmith 0.1.4", text);
+            Assert.Contains("Meshsmith 0.1.5", text);
             Assert.Matches("[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}", text);
             Assert.Contains("CONVERSION FAILED", text);
             Assert.Contains("exit code -1073741819", text);
