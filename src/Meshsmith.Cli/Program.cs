@@ -23,6 +23,7 @@ internal static class Program
         Console.Error.WriteLine("usage: meshsmith probe <file.step|file.igs>");
         Console.Error.WriteLine("       meshsmith convert <file.stl> [-o out.step] [--iges out.igs] [--faces report.json]");
         Console.Error.WriteLine("                        [--verify]   read the export back even for a big body (slow)");
+        Console.Error.WriteLine("                        [--segmenter flood|ransac]   region producer (default flood)");
         return 2;
     }
 
@@ -33,22 +34,44 @@ internal static class Program
         bool verifyAll = false;
         bool decimate = false;
         int decimateTarget = 60_000;
+        var segmenter = Meshsmith.Core.Pipeline.SegmenterKind.Flood;
 
         // Every flag is scanned: the old loop stopped one short of the end, so a value-less flag in
         // the last position (e.g. `... --verify`) was silently ignored.
-        for (int i = 2; i < args.Length; i++)
+        try
         {
-            switch (args[i])
+            for (int i = 2; i < args.Length; i++)
             {
-                case "-o" when i + 1 < args.Length: output = args[++i]; break;
-                case "--iges" when i + 1 < args.Length: iges = args[++i]; break;
-                case "--faces" when i + 1 < args.Length: report = args[++i]; break;
-                case "--verify": verifyAll = true; break;
-                case "--decimate": decimate = true; break;
-                case "--decimate-target" when i + 1 < args.Length:
-                    decimateTarget = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture);
-                    break;
+                switch (args[i])
+                {
+                    case "-o" when i + 1 < args.Length: output = args[++i]; break;
+                    case "--iges" when i + 1 < args.Length: iges = args[++i]; break;
+                    case "--faces" when i + 1 < args.Length: report = args[++i]; break;
+                    case "--verify": verifyAll = true; break;
+                    case "--decimate": decimate = true; break;
+                    case "--decimate-target" when i + 1 < args.Length:
+                        decimateTarget = int.Parse(args[++i], System.Globalization.CultureInfo.InvariantCulture);
+                        break;
+                    // An unknown value is an ERROR, never a silent fallback to flood: a flag that
+                    // silently does nothing is exactly what a caller cannot detect.
+                    case "--segmenter" when i + 1 < args.Length:
+                        string value = args[++i];
+                        segmenter = value switch
+                        {
+                            "flood" => Meshsmith.Core.Pipeline.SegmenterKind.Flood,
+                            "ransac" => Meshsmith.Core.Pipeline.SegmenterKind.Ransac,
+                            _ => throw new ArgumentException(
+                                $"--segmenter takes flood or ransac, not '{value}'")
+                        };
+                        break;
+                }
             }
+        }
+        catch (ArgumentException ex)
+        {
+            // A bad flag value is the caller's mistake, not a crash: one line, exit 2.
+            Console.Error.WriteLine($"error: {ex.Message}");
+            return 2;
         }
 
         if (!File.Exists(input))
@@ -65,8 +88,15 @@ internal static class Program
                 {
                     VerifyFaceLimit = verifyAll ? int.MaxValue : 4000,
                     ForceDecimate = decimate,
-                    DecimateTarget = decimateTarget
+                    DecimateTarget = decimateTarget,
+                    Segmenter = segmenter
                 });
+        }
+        catch (ArgumentException ex)
+        {
+            // A bad flag value is the caller's mistake, not a crash: one line, exit 2.
+            Console.Error.WriteLine($"error: {ex.Message}");
+            return 2;
         }
         catch (Exception ex) when (ex is Meshsmith.Core.Import.MeshFormatException
                                         or Meshsmith.Core.Mesh.StlFormatException)

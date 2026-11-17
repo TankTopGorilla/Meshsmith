@@ -6,6 +6,7 @@ using Meshsmith.Core.Geometry;
 using Meshsmith.Core.Import;
 using Meshsmith.Core.Mesh;
 using Meshsmith.Core.Report;
+using Meshsmith.Core.Seg;
 using Meshsmith.Core.Validation;
 using Occt;
 
@@ -96,8 +97,13 @@ public static class ConversionPipeline
         cancellationToken.ThrowIfCancellationRequested();
 
         options.Progress?.Invoke("recognising", 0.20);
-        var regions = PrimitiveClassifier.Classify(mesh, new PrimitiveClassifier.Options(tol, 12, 3),
-                                                   cancellationToken);
+        // The one plumbing point. Flood is the default, so an unflagged run issues the identical
+        // PrimitiveClassifier.Classify call it issued before the flag existed; both producers return
+        // the same List<ClassifiedRegion> and everything below is indifferent to which ran.
+        var regions = options.Segmenter == SegmenterKind.Ransac
+            ? RansacSegmenter.Classify(mesh, new RansacSegmenter.Options(tol, 12, 3), cancellationToken)
+            : PrimitiveClassifier.Classify(mesh, new PrimitiveClassifier.Options(tol, 12, 3),
+                                           cancellationToken);
         Mark("recognising");
         if (regions.Count == 0) throw new InvalidOperationException("no regions recognised");
         var recon = RecognitionStats.Compute(mesh, regions);

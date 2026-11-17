@@ -55,5 +55,31 @@ public sealed class ConversionOptions
     /// injection seam that proves the pipeline really goes through <c>MeshReaderRegistry</c>.</summary>
     public IReadOnlyList<Import.IMeshReader>? Readers { get; init; }
 
+    /// <summary>Which segmenter turns the mesh into regions.</summary>
+    public SegmenterKind Segmenter { get; init; } = SegmenterKind.Flood;
+
     public Action<string, double>? Progress { get; init; }
+}
+
+/// <summary>
+/// The two region producers. Both return the same <c>List&lt;ClassifiedRegion&gt;</c> and go through
+/// the same merge-and-split tail, so everything downstream (FaceBuilder, the sew ladder, the report)
+/// is indifferent to which one ran.
+/// </summary>
+public enum SegmenterKind
+{
+    /// <summary>
+    /// Today's behaviour and the default: dihedral flood fill, then one fit per grown region. Every
+    /// part must stay byte-identical until the hypothesis engine is proven on the knob, so this is
+    /// the rollback lever as well as the default - with no flag the pipeline executes the identical
+    /// <c>PrimitiveClassifier.Classify</c> call it executed before the flag existed.
+    /// </summary>
+    Flood,
+
+    /// <summary>
+    /// The hypothesis engine: flood first, then sequential RANSAC over the residual flood refused,
+    /// then a per-component rescue. It only ever ADDS regions in the residual, so it cannot lose a
+    /// region flood found.
+    /// </summary>
+    Ransac
 }
