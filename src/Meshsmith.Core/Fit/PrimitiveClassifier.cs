@@ -1,4 +1,4 @@
-using Meshsmith.Core.Geometry;
+﻿using Meshsmith.Core.Geometry;
 using Meshsmith.Core.Mesh;
 using Meshsmith.Core.Seg;
 
@@ -261,7 +261,7 @@ public static class PrimitiveClassifier
     /// 8x16..24x48 sphere) while a band shows exactly 2; and a sphere region on a part is never a
     /// 0.4 mm speck on a 60 mm part.
     /// </summary>
-    private static bool PlausibleSphere(IReadOnlyList<Vec3> points, SpherePrimitive sphere, double diag)
+    internal static bool PlausibleSphere(IReadOnlyList<Vec3> points, SpherePrimitive sphere, double diag)
     {
         if (sphere.Radius < 1e-4 * diag || sphere.Radius > 3 * diag) return false;
 
@@ -308,16 +308,16 @@ public static class PrimitiveClassifier
         return (points, normals);
     }
 
-    private static Vec3 AverageNormal(MeshData mesh, int[] triangles)
+    internal static Vec3 AverageNormal(MeshData mesh, int[] triangles)
     {
         var sum = Vec3.Zero;
         foreach (var t in triangles) sum += mesh.Normal(t) * mesh.Area(t);
         return sum.Normalized();
     }
 
-    private static double Area(MeshData mesh, int[] triangles) => triangles.Sum(mesh.Area);
+    internal static double Area(MeshData mesh, int[] triangles) => triangles.Sum(mesh.Area);
 
-    private static List<ClassifiedRegion> MergeSameSurface(MeshData mesh, List<ClassifiedRegion> regions, double tol)
+    internal static List<ClassifiedRegion> MergeSameSurface(MeshData mesh, List<ClassifiedRegion> regions, double tol)
     {
         // MVP: merge only planes that are coplanar within tolerance.
         var merged = new List<ClassifiedRegion>();
@@ -346,7 +346,7 @@ public static class PrimitiveClassifier
     /// at a vertex are NOT connected: a vertex is how two bodies meet in a welded mesh, not how a shell
     /// is sewn. Ordered by smallest triangle index, so region ids stay deterministic from run to run.
     /// </summary>
-    private static List<int[]> ConnectedPieces(MeshTopology topo, int[] triangles)
+    internal static List<int[]> ConnectedPieces(MeshTopology topo, int[] triangles)
     {
         if (triangles.Length == 0) return new List<int[]>();
         if (triangles.Length == 1) return new List<int[]> { triangles };
@@ -391,8 +391,8 @@ public static class PrimitiveClassifier
     /// RegionComponents.Group reports one component for a whole multi-body part (measured on clamp,
     /// IKI P1, IKI Part 1 and ATLAS) and the per-body degradation never engages.
     /// </summary>
-    private static List<ClassifiedRegion> SplitByConnectivity(MeshData mesh, MeshTopology topo,
-                                                             List<ClassifiedRegion> regions)
+    internal static List<ClassifiedRegion> SplitByConnectivity(MeshData mesh, MeshTopology topo,
+                                                               List<ClassifiedRegion> regions)
     {
         var split = new List<ClassifiedRegion>(regions.Count);
         foreach (var region in regions)
