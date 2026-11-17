@@ -547,8 +547,14 @@ public static class RansacSegmenter
         private IEnumerable<int[]> Components(int[] triangles)
         {
             int n = _mesh.TriangleCount;
-            if (_inSet is null) { _inSet = new bool[n]; _seen = new bool[n]; _stack = new int[n]; }
-            else { Array.Clear(_seen); }
+            if (_inSet is null || _seen is null || _stack is null)
+            {
+                _inSet = new bool[n]; _seen = new bool[n]; _stack = new int[n];
+            }
+            else
+            {
+                Array.Clear(_seen);
+            }
 
             foreach (var t in triangles) _inSet[t] = true;
 
