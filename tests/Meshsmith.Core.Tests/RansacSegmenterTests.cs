@@ -46,7 +46,7 @@ public class RansacSegmenterTests
     [Fact]
     public void Cylinder_Is_Recovered_With_Its_Radius_And_Axis()
     {
-        var mesh = SyntheticMeshes.CylinderSide(radius: 12, height: 40, n: 240);   // 9,600
+        var mesh = SyntheticMeshes.CylinderSide(radius: 12, height: 40, n: 240, stacks: 20);   // 9,600
         Assert.Equal(9_600, mesh.TriangleCount);
         double tol = SyntheticMeshes.Tol(mesh);
 
@@ -87,7 +87,7 @@ public class RansacSegmenterTests
             $"sphere recovered {sphereRecovered} of {sphereMesh.TriangleCount}");
 
         // Cone: radii 14 -> 4 over h = 30, 240 x 40 -> 19,200 triangles.
-        var coneMesh = SyntheticMeshes.Cone(r1: 14, r2: 4, height: 30, n: 240);
+        var coneMesh = SyntheticMeshes.Cone(r1: 14, r2: 4, height: 30, n: 240, stacks: 40);
         Assert.Equal(19_200, coneMesh.TriangleCount);
         double coneTol = SyntheticMeshes.Tol(coneMesh);
 
@@ -103,7 +103,10 @@ public class RansacSegmenterTests
         // The half-angle is NOT a defect (the plan's C4 is refuted): radii 14 -> 4 over h = 30 is
         // atan(10/30) = 18.4349 deg, and the fitter returns exactly that. atan(1/3) = 0.321750554 rad.
         double expected = Math.Atan(10.0 / 30.0);
-        Assert.True(Math.Abs(expected - 0.32173) < 0.00001, $"{expected}");   // the value itself
+        // The quoted constant is 0.32173 (5 decimal places), so the sanity check that the constant is
+        // the right one must be looser than half a unit in its last place: |0.3217505 - 0.32173| is
+        // 2.05e-5, so a 1e-5 bound rejected the CORRECT value. 1e-4 with a 5x margin is honest.
+        Assert.True(Math.Abs(expected - 0.32173) < 0.0001, $"{expected}");   // the value itself
         var cone = (ConePrimitive)cones.OrderByDescending(r => r.Triangles.Length).First().Primitive;
         Assert.True(Math.Abs(cone.HalfAngle - 0.32173) < 0.0009,
             $"HalfAngle {cone.HalfAngle} rad ({cone.HalfAngle * 180 / Math.PI:F4} deg), " +
@@ -134,7 +137,12 @@ public class RansacSegmenterTests
 
         // The companion negative: a patch of the same tube, small enough that the fit is
         // underdetermined, must be refused. This is why EnableTorus is off on the local path.
-        var patch = SyntheticMeshes.Torus(20, 7, 20, 20);   // 400 triangles: one corner of the tube
+        // 10 x 20 quads over a 90 x 180 degree window of the tube = 400 triangles, 231 vertices.
+        // An OPEN patch, not a closed body: SyntheticMeshes.Torus wraps both ways, so asking it for
+        // 20 x 20 returns a COMPLETE torus (800 triangles) - which of course fits perfectly, and which
+        // is why this negative used to fail while claiming to test a patch.
+        var patch = SyntheticMeshes.TorusPatch(20, 7, nu: 10, nv: 20);
+        Assert.Equal(400, patch.TriangleCount);
         var (patchPoints, patchNormals) = PointsAndNormals(patch);
         Assert.True(patchPoints.Count >= 32, "the negative needs enough points to be a real attempt");
         Assert.Null(Fitters.FitTorus(patchPoints, patchNormals, tol * 2, patch.Diagonal));
@@ -229,8 +237,8 @@ public class RansacSegmenterTests
         var meshes = new (string Name, MeshData Mesh)[]
         {
             ("plane", SyntheticMeshes.Plane(30, 40, 40)),
-            ("cylinder", SyntheticMeshes.CylinderSide(12, 40, 240)),
-            ("cone", SyntheticMeshes.Cone(14, 4, 30, 240)),
+            ("cylinder", SyntheticMeshes.CylinderSide(12, 40, 240, 20)),
+            ("cone", SyntheticMeshes.Cone(14, 4, 30, 240, 40)),
             ("sphere", SyntheticMeshes.Sphere(10, 48, 72)),
             ("torus", SyntheticMeshes.Torus(20, 7, 64, 32)),
             ("two-primitive", SyntheticMeshes.TwoPrimitive()),
@@ -268,8 +276,8 @@ public class RansacSegmenterTests
         var band = SyntheticMeshes.KnurlBand(cells: 2_000, trisPerPatch: 8);
         Assert.Equal(16_000, band.TriangleCount);
 
-        var cylinder = SyntheticMeshes.CylinderSide(12, 40, 240);       // 9,600
-        var sphere = SyntheticMeshes.Sphere(10, 48, 140);              // 26,600 - 2*140*95
+        var cylinder = SyntheticMeshes.CylinderSide(12, 40, 240, 20);   // 9,600
+        var sphere = SyntheticMeshes.Sphere(10, 96, 140);               // 26,600 = 2*140*95
         var mesh = Combine(band, cylinder, sphere);
         double tol = SyntheticMeshes.Tol(mesh);
 
@@ -345,7 +353,7 @@ public class RansacSegmenterTests
     [Fact]
     public void Noise_Up_To_A_Fifth_Of_Tolerance_Still_Recovers_The_Cylinder()
     {
-        var clean = SyntheticMeshes.CylinderSide(12, 40, 300);   // 30,000 triangles
+        var clean = SyntheticMeshes.CylinderSide(12, 40, 300, 50);   // 30,000 triangles
         double tol = SyntheticMeshes.Tol(clean);
         var mesh = SyntheticMeshes.Jitter(clean, sigma: 0.05, tol: tol);
 
@@ -369,7 +377,7 @@ public class RansacSegmenterTests
     [Fact]
     public void Noise_At_A_Quarter_Tolerance_Is_A_Documented_Fitter_Limit()
     {
-        var clean = SyntheticMeshes.CylinderSide(12, 40, 300);
+        var clean = SyntheticMeshes.CylinderSide(12, 40, 300, 50);
         double tol = SyntheticMeshes.Tol(clean);
         var noisy = SyntheticMeshes.Jitter(clean, sigma: 0.25, tol: tol);
 

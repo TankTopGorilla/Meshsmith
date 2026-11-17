@@ -38,23 +38,36 @@ internal static class SyntheticMeshes
     /// An open cylinder SIDE only - no caps, no axis vertex. An open side is one connected patch that
     /// is a cylinder and nothing else, which is what makes the cylinder assertion unambiguous; with
     /// caps the body also contains two planes and "recovered as a cylinder" would be a share, not a fact.
+    ///
+    /// <para><b>The stack count is a required argument, and that is deliberate.</b> It used to be
+    /// implicit: the builder emitted ONE ring of quads whatever `height` said, so
+    /// `CylinderSide(12, 40, 240)` produced 480 triangles while its callers asserted 9,600 - the
+    /// height was decoration. A default cannot express "how tall is this in triangles", and a fixture
+    /// whose triangle count is not what the assertion quotes makes every recovery number a lie, so
+    /// the count is now stated at every call site. Triangle count is exactly 2 * n * stacks.</para>
     /// </summary>
-    public static MeshData CylinderSide(double radius, double height, int n)
+    public static MeshData CylinderSide(double radius, double height, int n, int stacks)
     {
+        if (stacks < 1) throw new ArgumentOutOfRangeException(nameof(stacks));
         var v = new List<Vec3>();
         var idx = new List<int>();
-        for (int i = 0; i < n; i++)
+        for (int s = 0; s <= stacks; s++)
         {
-            double a = 2 * Math.PI * i / n;
-            v.Add(new Vec3(radius * Math.Cos(a), radius * Math.Sin(a), 0));
-            v.Add(new Vec3(radius * Math.Cos(a), radius * Math.Sin(a), height));
+            double z = height * s / stacks;
+            for (int i = 0; i < n; i++)
+            {
+                double a = 2 * Math.PI * i / n;
+                v.Add(new Vec3(radius * Math.Cos(a), radius * Math.Sin(a), z));
+            }
         }
-        for (int i = 0; i < n; i++)
-        {
-            int a = 2 * i, b = 2 * ((i + 1) % n);
-            idx.AddRange(new[] { a, b, b + 1 });
-            idx.AddRange(new[] { a, b + 1, a + 1 });
-        }
+
+        int Id(int i, int s) => s * n + (i % n);
+        for (int s = 0; s < stacks; s++)
+            for (int i = 0; i < n; i++)
+            {
+                idx.AddRange(new[] { Id(i, s), Id(i + 1, s), Id(i + 1, s + 1) });
+                idx.AddRange(new[] { Id(i, s), Id(i + 1, s + 1), Id(i, s + 1) });
+            }
         return new MeshData { Vertices = v.ToArray(), Indices = idx.ToArray() };
     }
 
@@ -62,23 +75,34 @@ internal static class SyntheticMeshes
     /// A truncated cone side, radii r1 (base, z=0) to r2 (top, z=height). Its half-angle at the APEX
     /// is atan(|r1 - r2| / height) - for 14 -> 4 over 30 that is atan(1/3) = 18.4349 degrees, which is
     /// what <c>Fitters.FitCone</c> returns. The apex lies above the top face when r2 &lt; r1.
+    ///
+    /// <para><b>`stacks` is required for the same reason as <see cref="CylinderSide"/>'s</b>: the
+    /// builder used to emit one ring of quads whatever `height` said, so `Cone(14, 4, 30, 240)` was
+    /// 480 triangles and not the 19,200 its callers asserted. Triangle count is 2 * n * stacks.</para>
     /// </summary>
-    public static MeshData Cone(double r1, double r2, double height, int n)
+    public static MeshData Cone(double r1, double r2, double height, int n, int stacks)
     {
+        if (stacks < 1) throw new ArgumentOutOfRangeException(nameof(stacks));
         var v = new List<Vec3>();
         var idx = new List<int>();
-        for (int i = 0; i < n; i++)
+        for (int s = 0; s <= stacks; s++)
         {
-            double a = 2 * Math.PI * i / n;
-            v.Add(new Vec3(r1 * Math.Cos(a), r1 * Math.Sin(a), 0));
-            v.Add(new Vec3(r2 * Math.Cos(a), r2 * Math.Sin(a), height));
+            double r = r1 + (r2 - r1) * s / stacks;
+            double z = height * s / stacks;
+            for (int i = 0; i < n; i++)
+            {
+                double a = 2 * Math.PI * i / n;
+                v.Add(new Vec3(r * Math.Cos(a), r * Math.Sin(a), z));
+            }
         }
-        for (int i = 0; i < n; i++)
-        {
-            int a = 2 * i, b = 2 * ((i + 1) % n);
-            idx.AddRange(new[] { a, b, b + 1 });
-            idx.AddRange(new[] { a, b + 1, a + 1 });
-        }
+
+        int Id(int i, int s) => s * n + (i % n);
+        for (int s = 0; s < stacks; s++)
+            for (int i = 0; i < n; i++)
+            {
+                idx.AddRange(new[] { Id(i, s), Id(i + 1, s), Id(i + 1, s + 1) });
+                idx.AddRange(new[] { Id(i, s), Id(i + 1, s + 1), Id(i, s + 1) });
+            }
         return new MeshData { Vertices = v.ToArray(), Indices = idx.ToArray() };
     }
 
@@ -144,6 +168,47 @@ internal static class SyntheticMeshes
     }
 
     /// <summary>
+    /// An OPEN patch of the same torus surface: `nu` steps over `uSpanDeg` of the major circle and
+    /// `nv` over `vSpanDeg` of the tube, with no wrap in either direction. This is what a local
+    /// hypothesis actually sees - a spatial block or a normal-coherent patch cuts the tube at
+    /// arbitrary places - and it is the domain <c>FitTorus</c> must REFUSE.
+    ///
+    /// <para>Why it has to be its own builder: <see cref="Torus"/> wraps (<c>i % N</c>, <c>j % M</c>)
+    /// in both directions, so calling it with small N and M still produces a COMPLETE closed torus -
+    /// 800 triangles at 20x20 - which fits perfectly well. A "400-triangle patch" is not expressible
+    /// that way, and the negative test was accidentally asserting that a whole torus does not fit a
+    /// torus. Triangle count is 2 * nu * nv.</para>
+    /// </summary>
+    public static MeshData TorusPatch(double major, double minor, int nu, int nv,
+                                      double uSpanDeg = 90, double vSpanDeg = 180)
+    {
+        if (nu < 1 || nv < 1) throw new ArgumentOutOfRangeException(nameof(nu));
+        double uSpan = uSpanDeg * Math.PI / 180.0, vSpan = vSpanDeg * Math.PI / 180.0;
+
+        var v = new List<Vec3>();
+        var idx = new List<int>();
+        for (int i = 0; i <= nu; i++)
+        {
+            double u = uSpan * i / nu;
+            for (int j = 0; j <= nv; j++)
+            {
+                double w = vSpan * j / nv;
+                v.Add(new Vec3((major + minor * Math.Cos(w)) * Math.Cos(u),
+                               (major + minor * Math.Cos(w)) * Math.Sin(u),
+                               minor * Math.Sin(w)));
+            }
+        }
+        int Id(int i, int j) => i * (nv + 1) + j;
+        for (int i = 0; i < nu; i++)
+            for (int j = 0; j < nv; j++)
+            {
+                idx.AddRange(new[] { Id(i, j), Id(i + 1, j), Id(i + 1, j + 1) });
+                idx.AddRange(new[] { Id(i, j), Id(i + 1, j + 1), Id(i, j + 1) });
+            }
+        return new MeshData { Vertices = v.ToArray(), Indices = idx.ToArray() };
+    }
+
+    /// <summary>
     /// A knurled band: `cells` flat square patches laid around a cylinder of radius R, each patch
     /// `trisPerPatch` triangles (a cell is trisPerPatch/2 quads, so 8 = 2x2 quads, 24 = 3x4). The
     /// patches are DISCONNECTED BY CONSTRUCTION - they do not share vertices - so flood fill splits
@@ -199,29 +264,57 @@ internal static class SyntheticMeshes
     }
 
     /// <summary>
-    /// A CONNECTED shallow-ribbed body: a cylinder side carrying axial ribs whose crest dihedral is
-    /// kept under the grower's 12 deg threshold, plus a dome on top. This is R2's shape, and its whole
-    /// point is that flood fill CANNOT split it: every dihedral is under the threshold, so the grower
-    /// returns one region and no single primitive fits it. A disconnected band would be trivially
-    /// segmented by flood and would prove nothing.
+    /// A CONNECTED shallow-ribbed body: a smooth cylindrical side, a shallow ribbed band above it,
+    /// and a dome on top, all sharing vertex rings so the mesh is ONE patch. This is R2's shape, and
+    /// its whole point is that flood fill CANNOT split it usefully: every dihedral is under the
+    /// grower's 12 degree threshold, so the grower returns one region that no single primitive fits.
     ///
-    /// `ribs` crests of `amplitude`, all shallow angles; `stacks` rows up the side.
+    /// <para><b>Why the dome rings stop one short of the pole.</b> The first version stepped
+    /// <c>phi = (pi/2) * k / domeRings</c> for k = 1..domeRings, so the last ring had
+    /// <c>phi = pi/2</c>, i.e. <c>rr = R*cos(pi/2) = 0</c> - every vertex of that ring landed exactly
+    /// on the pole, making its 480 triangles degenerate. A zero-area triangle has no normal, and the
+    /// measured consequence was a bogus 90 degree dihedral on 3,240 edges of a body that is supposed
+    /// to be smooth. The ring parameter now runs to <c>domeRings+1</c> so the last quad row is a real
+    /// ring and the pole fan is the only point row.</para>
+    ///
+    /// <para><b>The amplitude is 0.10 because that is the largest crest this segment count can carry
+    /// under 12 degrees.</b> Measured sweep (ribs 8..24 x segmentsPerRib 16..32): at amplitude 0.45 the
+    /// crest dihedral reaches 47.7 degrees, so the grower splits the band into 300+ ribbons and flood
+    /// recovers 32 % - the fixture then measures the grower, not the hypothesis engine. At 0.10 the
+    /// whole body stays ONE piece at 12 degrees (max dihedral 11.31, which is the dome's pole fan), no
+    /// fitter explains it, and the paired result is flood 19.5 % vs ransac 97.5 %. That paired gap is
+    /// what T11 asserts.</para>
+    ///
+    /// Triangle count at the defaults: 2*240*(40 + 10 + 16) + 240 = 31,920.
     /// </summary>
-    public static MeshData R2Drum(int ribs = 24, int segmentsPerRib = 16, int stacks = 40,
-                                  double radius = 12, double height = 32,
-                                  double amplitude = 0.55, double domeHeight = 12,
-                                  int domeRings = 8, int domeSlices = 96)
+    public static MeshData R2Drum(int ribs = 15, int segmentsPerRib = 16, int sideStacks = 40,
+                                  double radius = 12, double sideHeight = 20,
+                                  int bandStacks = 10, double bandHeight = 5, double amplitude = 0.10,
+                                  double domeHeight = 12, int domeRings = 16)
     {
         var v = new List<Vec3>();
         var idx = new List<int>();
 
         int around = ribs * segmentsPerRib;
+        double top = sideHeight + bandHeight;
 
-        // Side: r(u) = R + amplitude * (1 - cos(ribs*u))/2 - a smooth crest, so the dihedral between
-        // adjacent facets stays well under 12 deg for the segment count above.
-        for (int j = 0; j <= stacks; j++)
+        // Smooth side: r = R, z = 0 .. sideHeight.
+        for (int j = 0; j <= sideStacks; j++)
         {
-            double z = height * j / stacks;
+            double z = sideHeight * j / sideStacks;
+            for (int i = 0; i < around; i++)
+            {
+                double a = 2 * Math.PI * i / around;
+                v.Add(new Vec3(radius * Math.Cos(a), radius * Math.Sin(a), z));
+            }
+        }
+
+        // Ribbed band: r(a) = R + amplitude * (1 - cos(ribs*a))/2 - smooth crests whose dihedral
+        // stays well under 12 deg for this segment count.
+        int bandBase = v.Count;
+        for (int j = 1; j <= bandStacks; j++)
+        {
+            double z = sideHeight + bandHeight * j / bandStacks;
             for (int i = 0; i < around; i++)
             {
                 double a = 2 * Math.PI * i / around;
@@ -229,22 +322,14 @@ internal static class SyntheticMeshes
                 v.Add(new Vec3(r * Math.Cos(a), r * Math.Sin(a), z));
             }
         }
-        int Side(int i, int j) => j * around + (i % around);
-        for (int j = 0; j < stacks; j++)
-            for (int i = 0; i < around; i++)
-            {
-                idx.AddRange(new[] { Side(i, j), Side(i + 1, j), Side(i + 1, j + 1) });
-                idx.AddRange(new[] { Side(i, j), Side(i + 1, j + 1), Side(i, j + 1) });
-            }
 
-        // Dome: a half-ellipsoid on top of the side's top ring, sharing its boundary vertices so the
-        // body is ONE connected patch with no seam for the grower to stop at.
+        // Dome: a half-ellipsoid, k = 1..domeRings are REAL rings; the pole is a single vertex.
         int domeBase = v.Count;
         for (int k = 1; k <= domeRings; k++)
         {
-            double phi = Math.PI / 2 * k / domeRings;
+            double phi = Math.PI / 2 * k / (domeRings + 1);
             double rr = radius * Math.Cos(phi);
-            double z = height + domeHeight * Math.Sin(phi);
+            double z = top + domeHeight * Math.Sin(phi);
             for (int i = 0; i < around; i++)
             {
                 double a = 2 * Math.PI * i / around;
@@ -252,21 +337,33 @@ internal static class SyntheticMeshes
             }
         }
         int pole = v.Count;
-        v.Add(new Vec3(0, 0, height + domeHeight));
+        v.Add(new Vec3(0, 0, top + domeHeight));
 
+        int Side(int i, int j) => j * around + (i % around);
+        int Band(int i, int j) => bandBase + (j - 1) * around + (i % around);
         int Dome(int i, int k) => domeBase + (k - 1) * around + (i % around);
-        for (int i = 0; i < around; i++)
+
+        void Quad(int a, int b, int c, int d)
         {
-            // the rim uses the SIDE's last ring so the two surfaces share vertices
-            idx.AddRange(new[] { Side(i, stacks), Side(i + 1, stacks), Dome(i + 1, 1) });
-            idx.AddRange(new[] { Side(i, stacks), Dome(i + 1, 1), Dome(i, 1) });
+            idx.AddRange(new[] { a, b, c });
+            idx.AddRange(new[] { a, c, d });
         }
+
+        for (int j = 0; j < sideStacks; j++)
+            for (int i = 0; i < around; i++)
+                Quad(Side(i, j), Side(i + 1, j), Side(i + 1, j + 1), Side(i, j + 1));
+
+        for (int i = 0; i < around; i++)
+            Quad(Side(i, sideStacks), Side(i + 1, sideStacks), Band(i + 1, 1), Band(i, 1));
+        for (int j = 1; j < bandStacks; j++)
+            for (int i = 0; i < around; i++)
+                Quad(Band(i, j), Band(i + 1, j), Band(i + 1, j + 1), Band(i, j + 1));
+
+        for (int i = 0; i < around; i++)
+            Quad(Band(i, bandStacks), Band(i + 1, bandStacks), Dome(i + 1, 1), Dome(i, 1));
         for (int k = 1; k < domeRings; k++)
             for (int i = 0; i < around; i++)
-            {
-                idx.AddRange(new[] { Dome(i, k), Dome(i + 1, k), Dome(i + 1, k + 1) });
-                idx.AddRange(new[] { Dome(i, k), Dome(i + 1, k + 1), Dome(i, k + 1) });
-            }
+                Quad(Dome(i, k), Dome(i + 1, k), Dome(i + 1, k + 1), Dome(i, k + 1));
         for (int i = 0; i < around; i++)
             idx.AddRange(new[] { Dome(i, domeRings), Dome(i + 1, domeRings), pole });
 
@@ -277,11 +374,15 @@ internal static class SyntheticMeshes
     /// A plane and a cylinder side standing on it, far enough apart that they share no vertex. The
     /// split's expected triangle counts are exact by construction: 24,000 for the cylinder side and
     /// 2*86*86 = 14,792 for the plane.
+    ///
+    /// <para>The cylinder's stack count is `height` in triangles: 300 segments over 40 rows is
+    /// 2 * 300 * 40 = 24,000. Before the stacks argument existed this builder emitted 600 triangles
+    /// for that side, so the scene was 15,392 and the plan's 38,792 was unreachable.</para>
     /// </summary>
     public static MeshData TwoPrimitive()
     {
-        var plane = Plane(60, 86, 86);           // (86)^2 quads -> 14,792 triangles
-        var cylinder = CylinderSide(12, 40, 300); // 300 segments -> 600 quads -> 24,000 triangles
+        var plane = Plane(60, 86, 86);                    // (86)^2 quads -> 14,792 triangles
+        var cylinder = CylinderSide(12, 40, 300, 40);     // 300 x 40 -> 24,000 triangles
 
         var v = new List<Vec3>(plane.Vertices.Length + cylinder.Vertices.Length);
         v.AddRange(plane.Vertices);

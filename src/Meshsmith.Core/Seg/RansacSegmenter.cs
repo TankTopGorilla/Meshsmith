@@ -249,6 +249,20 @@ public static class RansacSegmenter
             int n = _mesh.TriangleCount;
             if (_residual.Count < _o.Floor) return;
 
+            // A face must be a CONNECTED patch of at least Floor triangles, and connectivity is a
+            // property of the mesh, not of any hypothesis. So a mesh component smaller than the floor
+            // can never become an analytic region under ANY model, and no seed inside it is worth a
+            // hypothesis. Pruning that up front is what keeps tier B linear: on KnurlBand(2,000, 8)
+            // the 16,000 band triangles are 2,000 components of 8, and without this every one of them
+            // is a tier-B seed that scores the whole band and is then refused - measured as the suite
+            // going 95 s -> 420 s. With it, they are simply excluded and stay faceted.
+            var residualSet = _residual.ToArray();
+            foreach (var component in Components(residualSet))
+            {
+                if (component.Length >= _o.Floor) continue;
+                foreach (var t in component) _tried[t] = true;
+            }
+
             // Tier A: one hypothesis per seed; accept only the round's single global best, and only
             // while it is big. One region per round makes order-dependence impossible - a weak
             // hypothesis cannot pre-empt a strong one, because nothing is accepted until it IS the best.
@@ -275,7 +289,12 @@ public static class RansacSegmenter
                 if (best is null) break;
                 double need = Math.Max(_o.Floor, remaining * _o.TierAMinShare);
                 if (best.Score < need) break;
-                Accept(best);
+
+                // A hypothesis whose every connected component is under the floor assigns nothing.
+                // That is this round's evidence that tier A has no BIG region left (the knurl's
+                // 16,000-triangle band is one cylinder score made of 2,000 eight-triangle patches),
+                // so the long tail belongs to tier B rather than to another identical round.
+                if (Accept(best) == 0) break;
             }
 
             // Tier B: the long tail. Fixed permutation, one hypothesis per seed, floor only, and a
@@ -288,7 +307,12 @@ public static class RansacSegmenter
                 if ((_hypotheses & 0x3FF) == 0) _ct.ThrowIfCancellationRequested();
 
                 var candidate = Hypothesise(t);
-                if (candidate is not null && candidate.Score >= _o.Floor) { Accept(candidate); continue; }
+
+                // A candidate is accepted only when it actually assigns something. Score is a GLOBAL
+                // count, but Accept keeps only components at or above the floor, so a global score of
+                // 16,000 can assign nothing at all; treating that as success would leave the seed
+                // unmarked and re-hypothesise it forever.
+                if (candidate is not null && candidate.Score >= _o.Floor && Accept(candidate) > 0) continue;
                 _tried[t] = true;
             }
         }
@@ -475,18 +499,93 @@ public static class RansacSegmenter
         /// Take a hypothesis. The inlier set is re-filtered against the assignment here as well as in
         /// the score, because a hypothesis is scored before it is accepted and the round that scored it
         /// may have accepted something else first.
+        ///
+        /// <para><b>The floor applies per COMPONENT, not per accepted set.</b> This is the difference
+        /// between "16,000 triangles became a cylinder" and "2,000 eight-triangle faces were invented".
+        /// A hypothesis is global, so on a band of sub-floor patches laid on a cylinder it scores
+        /// 16,000 - every triangle really is within tolerance of r=12 - and the shared tail then splits
+        /// that one region into its connected patches, which is 2,000 pieces of 8. The result passes a
+        /// coverage count while producing faces the floor exists to refuse (the plan's R2: "a 3 degree
+        /// split covers 78.7 % of clamp's jaw with 963 one-triangle planes"). Accepting a region means
+        /// accepting faces, so each component must clear the floor on its own; components that do not
+        /// stay unassigned and fall through to the faceted leftover. Measured on KnurlBand(2,000, 8):
+        /// 2,000 cylinder regions -> 0, 16,000 triangles back to faceted.</para>
         /// </summary>
-        private void Accept(Candidate candidate)
+        /// <returns>How many triangles this accept actually assigned. Zero means the round made no
+        /// progress and the caller must not loop again on the same evidence.</returns>
+        private int Accept(Candidate candidate)
         {
             var triangles = candidate.Triangles.Where(t => !_assigned[t]).ToArray();
-            if (triangles.Length == 0) return;
+            if (triangles.Length == 0) return 0;
 
-            foreach (var t in triangles) _assigned[t] = true;
-            _regions.Add(new ClassifiedRegion(triangles,
-                candidate.Model with { SourceTriangles = triangles.Length },
-                PrimitiveClassifier.AverageNormal(_mesh, triangles),
-                PrimitiveClassifier.Area(_mesh, triangles)));
+            int taken = 0;
+            foreach (var piece in Components(triangles))
+            {
+                if (piece.Length < _o.Floor) continue;      // a sub-floor patch is not a face
+
+                foreach (var t in piece) _assigned[t] = true;
+                _regions.Add(new ClassifiedRegion(piece,
+                    candidate.Model with { SourceTriangles = piece.Length },
+                    PrimitiveClassifier.AverageNormal(_mesh, piece),
+                    PrimitiveClassifier.Area(_mesh, piece)));
+                taken += piece.Length;
+            }
+            return taken;
         }
+
+        /// <summary>
+        /// The connected components of a triangle set, by shared mesh edge, ascending within a piece
+        /// and ordered by smallest index. Semantically identical to
+        /// <see cref="PrimitiveClassifier.ConnectedPieces"/> - which is used for the final split, once
+        /// per run - but written over a reusable scratch array instead of a Dictionary plus LINQ.
+        ///
+        /// <para>This is not premature optimisation. Accept runs once per accepted hypothesis AND once
+        /// per refused tier-B seed, and the knurl-8 mesh refuses ~16,000 of them, each holding a
+        /// 16,000-triangle candidate; the dictionary version took the suite from 95 s to over 420 s.
+        /// A bool[] + stack BFS is three array reads per edge and turned that back into seconds.</para>
+        /// </summary>
+        private IEnumerable<int[]> Components(int[] triangles)
+        {
+            int n = _mesh.TriangleCount;
+            if (_inSet is null) { _inSet = new bool[n]; _seen = new bool[n]; _stack = new int[n]; }
+            else { Array.Clear(_seen); }
+
+            foreach (var t in triangles) _inSet[t] = true;
+
+            var pieces = new List<int[]>();
+            foreach (int start in triangles)        // ascending: the first unseen triangle of a piece
+            {
+                if (_seen[start]) continue;
+
+                int top = 0;
+                _stack[top++] = start;
+                _seen[start] = true;
+                var piece = new List<int>();
+
+                while (top > 0)
+                {
+                    int t = _stack[--top];
+                    piece.Add(t);
+                    for (int e = 0; e < 3; e++)
+                    {
+                        int nb = _topo.Neighbor[t * 3 + e];
+                        if (nb < 0 || _seen[nb] || !_inSet[nb]) continue;
+                        _seen[nb] = true;
+                        _stack[top++] = nb;
+                    }
+                }
+
+                piece.Sort();
+                pieces.Add(piece.ToArray());
+            }
+
+            foreach (var t in triangles) _inSet[t] = false;
+            return pieces;
+        }
+
+        private bool[]? _inSet;
+        private bool[]? _seen;
+        private int[]? _stack;
 
         // ---- Tier 3: connectivity rescue -------------------------------------------------------
 
