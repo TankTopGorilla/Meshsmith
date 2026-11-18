@@ -18,7 +18,7 @@ from disk and checked before the app calls it a success.
   app **warns on every FBX read** rather than guessing. Draco/meshopt-compressed glTF and points/lines
   fail with a named message instead of a stack trace.
 - **6 of 6** real test parts convert to a valid solid; 0 crashes.
-- `Meshsmith.Core` 130 tests, `Meshsmith.App` 159 tests.
+- `Meshsmith.Core` 150 tests, `Meshsmith.App` 159 tests.
 - **R1.2**, measured through the CLI: IKI KATLI MONT P1 and Part 2 now export **2,024 faces** (was
   2,784) as 8 solids at 96.8 % analytic coverage, `artifact=verified`; `pin.stl` is unchanged at
   4 faces, valid.
@@ -66,10 +66,17 @@ from disk and checked before the app calls it a success.
   part, `clamp`, `pin` and all fixtures are byte-identical (the corpus table is unchanged).
 - **R4, the honest half:** the knob is now **convertible, not analytic** — `coverage=4.5 %`, because
   the analytic sew failed (2,010 free edges) and the exact faceted solid was exported instead, at
-  decimated density. That body-keeping/sewing seam is R1.2-adjacent, and the dome itself still needs
-  the RANSAC-class primitive-hypothesis segmenter (R5/R2-class). Also measured and **not** met: the
-  10-minute bound. `total=1159.83s`, of which `sewing=938s` — re-sewing 60,000 facets is what makes
-  the knob slow now, not recognition (`recognising=20.90s`). The decimation itself is not the cost.
+  decimated density. Also measured and **not** met: the 10-minute bound. `total=1159.83s`, of which
+  `sewing=938s` — re-sewing 60,000 facets is what makes the knob slow now, not recognition
+  (`recognising=20.90s`). The decimation itself is not the cost.
+- **R6, the answer we did not want: a better segmenter does not fix the knob.** A RANSAC-class
+  primitive-hypothesis segmenter was built and passes every synthetic check (100 % per primitive, a
+  two-primitive scene split exactly, 60 k triangles in 0.27 s) and ships behind `--segmenter ransac`
+  with `flood` still the default. On the real knob it raises coverage only **4.5 % → 6.6 %** while
+  making the exported solid **14.7× less accurate** against the source mesh (deviation 0.0058 →
+  0.0850 mm) at **+66 %** runtime. That is a net loss, so it is not wired in. The knurled grip's ~95 %
+  faceted mass is not a segmentation problem at this density — it needs a freeform/NURBS
+  reverse-engineering engine, which is a different product, not another phase.
 - **P10a**, measured through the CLI: `.glb`, `.gltf` and `.fbx` now open through one `IMeshReader`
   registry that carries cancellation and byte progress from birth. glTF is metres by spec, so a
   `0.01`-unit cube arrives as **10 mm / 1,000 mm³ exactly**, printed as `units="glTF · metres · ×1000"`;
